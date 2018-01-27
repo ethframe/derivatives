@@ -13,7 +13,7 @@ def anywhere(regex):
 
 
 def no(regex):
-    return AnyChar().star() & ~anywhere(regex)
+    return ~anywhere(regex)
 
 
 def make_lexer(tokens):

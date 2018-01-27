@@ -594,10 +594,28 @@ def follow_set(state, char, delta):
     return result
 
 
+def absorbing_states(rev_delta, accepting):
+    absorbing = set(rev_delta) - set(accepting)
+    queue = deque(accepting)
+    while queue:
+        state = queue.popleft()
+        prev_set = set()
+        for prev in rev_delta[state].values():
+            prev_set.update(prev)
+        queue.extend(absorbing & prev_set)
+        absorbing.difference_update(prev_set)
+    return absorbing
+
+
 def minimize_dfa(start, delta, accepting, alphabet, tags):
+    rev_delta = reverse_delta(delta)
+    absorbing = absorbing_states(rev_delta, accepting)
+
     nacc = {}
     acc = {}
     for state in delta:
+        if state in absorbing:
+            continue
         if state in accepting:
             acc.setdefault(frozenset(tags[state]), set()).add(state)
         else:
@@ -606,7 +624,6 @@ def minimize_dfa(start, delta, accepting, alphabet, tags):
     partition = list(nacc.values()) + list(acc.values())
 
     queue = deque(acc.values())
-    rev_delta = reverse_delta(delta)
 
     while queue:
         state = queue.popleft()
@@ -636,7 +653,8 @@ def minimize_dfa(start, delta, accepting, alphabet, tags):
         if state in accepting:
             new_accepting.append(i)
         for char, n in delta[state].items():
-            new_delta[i][char] = state_map[n]
+            if n not in absorbing:
+                new_delta[i][char] = state_map[n]
     return new_start, new_delta, new_accepting, alphabet, new_tags
 
 
