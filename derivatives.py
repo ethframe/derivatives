@@ -34,11 +34,7 @@ class Regex(object):
         raise NotImplementedError()
 
     def __mul__(self, other):
-        if isinstance(self, Sequence):
-            return self._first * (self._second * other)
-        if isinstance(self, Empty) or isinstance(other, Empty):
-            return Empty()
-        if isinstance(self, Epsilon):
+        if isinstance(other, Empty):
             return other
         if isinstance(other, Epsilon):
             return self
@@ -46,9 +42,7 @@ class Regex(object):
 
     def __or__(self, other):
         if isinstance(self, Epsilon) and isinstance(other, Epsilon):
-            return Epsilon()
-        if isinstance(self, Empty):
-            return other
+            return self
         if isinstance(other, Empty):
             return self
         choices = sorted(self.choices() | other.choices())
@@ -58,15 +52,13 @@ class Regex(object):
         return regex
 
     def __and__(self, other):
-        if isinstance(self, Epsilon) and isinstance(other, Epsilon):
-            return Epsilon()
-        if isinstance(self, Empty) or isinstance(other, Empty):
-            return Empty()
+        if isinstance(other, Empty):
+            return other
+        if self == other:
+            return self
         return Intersect(self, other)
 
     def __sub__(self, other):
-        if isinstance(self, Empty):
-            return Empty()
         if isinstance(other, Empty):
             return self
         if self == other:
@@ -131,6 +123,18 @@ class Empty(Regex):
     def choices(self):
         return set()
 
+    def __mul__(self, other):
+        return self
+
+    def __or__(self, other):
+        return other
+
+    def __and__(self, other):
+        return self
+
+    def __sub__(self, other):
+        return self
+
     def _key(self):
         return ()
 
@@ -157,6 +161,9 @@ class Epsilon(Regex):
 
     def choices(self):
         return set([self])
+
+    def __mul__(self, other):
+        return other
 
     def _key(self):
         return ()
@@ -361,6 +368,9 @@ class Sequence(Regex):
 
     def choices(self):
         return set([self])
+
+    def __mul__(self, other):
+        return self._first * (self._second * other)
 
     def _key(self):
         return (self._first, self._second)
