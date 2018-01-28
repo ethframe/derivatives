@@ -710,3 +710,70 @@ class DFA(Regex):
     def conflicts(self):
         return set(tuple(sorted(tags))
                    for tags in self._tags.values() if len(tags) > 1)
+
+    def compact(self):
+        def char_ranges(chars):
+            ranges = []
+            start = None
+            end = None
+            for char in sorted(chars):
+                if start is None:
+                    start = end = char
+                elif ord(end) + 1 == ord(char):
+                    end = char
+                else:
+                    ranges.append((start, end))
+                    start = end = char
+            ranges.append((start, end))
+            return tuple(ranges)
+
+        c_tags = {k: v for k, v in self._tags.items() if v}
+        c_delta = {}
+        for state, delta in self._delta.items():
+            c_delta[state] = {}
+            delta_chars = {}
+            for char, next_state in delta.items():
+                delta_chars.setdefault(next_state, []).append(char)
+            for next_state, chars in delta_chars.items():
+                c_delta[state][char_ranges(chars)] = next_state
+        return self._start, c_delta, self._accepting, c_tags
+
+    def dot(self):
+        start, delta, accepting, tags = self.compact()
+        d = ["digraph dfa {", "  rankdir=LR",
+             '  "" [shape=none]', '  "" -> "{}"'.format(start)]
+        def fmt_ranges(rs):
+            fmt = []
+            def fmt_range(r):
+                if r[0] == r[1]:
+                    return fmt_char(r[0])
+                if ord(r[0]) + 1 == ord(r[1]):
+                    return fmt_char(r[0]) + fmt_char(r[1])
+                return "{}-{}".format(fmt_char(r[0]), fmt_char(r[1]))
+            def fmt_char(c):
+                if c < chr(32) or c > chr(126):
+                    return "\\\\x{:02x}".format(ord(c))
+                if c in "[]-\\'\"":
+                    return "\\" + c
+                return c
+            if len(rs) == 1 and rs[0][0] == rs[0][1]:
+                return fmt_char(rs[0][0])
+            for r in rs:
+                fmt.append(fmt_range(r))
+            return "[{}]".format("".join(fmt))
+        for state in delta:
+            props = []
+            if state in accepting:
+                props.append("shape=doublecircle")
+            else:
+                props.append("shape=circle")
+            props.append("fixedsize=shape")
+            if state in tags:
+                label = "{} {}".format(state, ", ".join(sorted(tags[state])))
+                props.append('label="{}"'.format(label))
+            d.append('  "{}" [{}]'.format(state, " ".join(props)))
+            for chars, n in delta[state].items():
+                label = 'label="{}"'.format(fmt_ranges(chars))
+                d.append('  "{}" -> "{}" [{}]'.format(state, n, label))
+        d.append("}")
+        return "\n".join(d)

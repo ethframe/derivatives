@@ -124,6 +124,8 @@ def main():
     tokens.append(("bad", AnyChar()))
 
     lexer = make_lexer(tokens)
+    with open("lexer.dot", "w") as fp:
+        fp.write(lexer.dot())
 
     source = """
 int yywrap(void)        /* called at end of input */
