@@ -118,7 +118,7 @@ class Empty(Regex):
         return set()
 
     def derive(self, char):
-        return Empty()
+        return self
 
     def tags(self):
         return set()
@@ -694,10 +694,6 @@ class DFA(Regex):
 
     def derive(self, char):
         delta = self._delta[self._start]
-        if not self._tags[self._start] and \
-                self._start not in self._accepting and \
-                all(s == self._start for s in delta.values()):
-            return Empty()
         if char in delta:
             return DFA(delta[char], self._delta, self._accepting,
                        self._alphabet, self._tags)
