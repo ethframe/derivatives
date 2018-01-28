@@ -90,11 +90,14 @@ class Regex(object):
 
     def __lt__(self, other):
         return id(self.__class__) < id(other.__class__) or \
-            id(self.__class__) == id(other.__class__) and \
+            self.__class__ is other.__class__ and \
             self._key() < other._key()
 
     def __hash__(self):
-        return hash((id(self.__class__),) + self._key())
+        val = getattr(self, "_hash", None)
+        if val is None:
+            self._hash = val = hash((id(self.__class__),) + self._key())
+        return val
 
     def dfa(self):
         return DFA(*minimize_dfa(*make_dfa(self)))
