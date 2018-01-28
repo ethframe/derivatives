@@ -30,9 +30,6 @@ class Regex(object):
     def choices(self):
         raise NotImplementedError()
 
-    def prefix(self):
-        raise NotImplementedError()
-
     def __mul__(self, other):
         if isinstance(other, Empty):
             return other
@@ -41,8 +38,6 @@ class Regex(object):
         return Sequence(self, other)
 
     def __or__(self, other):
-        if isinstance(self, Epsilon) and isinstance(other, Epsilon):
-            return self
         if isinstance(other, Empty):
             return self
         choices = sorted(self.choices() | other.choices())
