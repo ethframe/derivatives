@@ -404,7 +404,7 @@ class Choice(Regex):
         return self._first.tags() | self._second.tags()
 
     def choices(self):
-        return set([self._first, self._second])
+        return self._first.choices() | self._second.choices()
 
     def _key(self):
         return (self._first, self._second)
