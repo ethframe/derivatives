@@ -20,7 +20,8 @@ def make_lexer(tokens):
     regex = Empty()
     parts = Empty()
     for name, tok in tokens:
-        regex |= (tok - parts) * Tag(name)
+        tok = tok.dfa()
+        regex |= ((tok - parts) * Tag(name)).dfa()
         parts |= tok
     return regex.dfa()
 
