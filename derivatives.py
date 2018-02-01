@@ -566,9 +566,9 @@ def make_dfa(regex):
             next_state = state.derive(char)
             if isinstance(next_state, Empty):
                 continue
-            l = len(state_map)
+            sm_len = len(state_map)
             next_index = state_map[next_state]
-            if l != len(state_map):
+            if sm_len != len(state_map):
                 queue.append((next_index, next_state))
             delta[state_index][char] = next_index
 
@@ -742,25 +742,30 @@ class DFA(Regex):
         start, delta, accepting, tags = self.compact()
         d = ["digraph dfa {", "  rankdir=LR",
              '  "" [shape=none]', '  "" -> "{}"'.format(start)]
+
         def fmt_ranges(rs):
             fmt = []
+
             def fmt_range(r):
                 if r[0] == r[1]:
                     return fmt_char(r[0])
                 if ord(r[0]) + 1 == ord(r[1]):
                     return fmt_char(r[0]) + fmt_char(r[1])
                 return "{}-{}".format(fmt_char(r[0]), fmt_char(r[1]))
+
             def fmt_char(c):
                 if c < chr(32) or c > chr(126):
                     return "\\\\x{:02x}".format(ord(c))
                 if c in "[]-\\'\"":
                     return "\\" + c
                 return c
+
             if len(rs) == 1 and rs[0][0] == rs[0][1]:
                 return fmt_char(rs[0][0])
             for r in rs:
                 fmt.append(fmt_range(r))
             return "[{}]".format("".join(fmt))
+
         for state in delta:
             props = []
             if state in accepting:
