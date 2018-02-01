@@ -588,10 +588,10 @@ def inplace_refine(target, refiner):
 
 
 def reverse_delta(delta):
-    rev_delta = {}
+    rev_delta = {s: {} for s in delta}
     for s, cn in delta.items():
         for c, n in cn.items():
-            rev_delta.setdefault(n, {}).setdefault(c, set()).add(s)
+            rev_delta[n].setdefault(c, set()).add(s)
     return rev_delta
 
 
