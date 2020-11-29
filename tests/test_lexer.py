@@ -108,6 +108,7 @@ def c_lex(c_lexer, string):
 TEST_SOURCE = """
 size_t strlen(const char *s)
 {
+    /** Simple strlen function **/
     size_t i;
     for (i = 0; s[i] != '\0'; i++);
     return i;
@@ -126,6 +127,8 @@ TEST_TOKENS = [
     ('rparen', ')'),
 # {
     ('lbrace', '{'),
+# /** Simple strlen function **/
+    ('comment', '/** Simple strlen function **/'),
 # size_t i;
     ('ident', 'size_t'),
     ('ident', 'i'),
