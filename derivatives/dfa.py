@@ -1,6 +1,8 @@
 from collections import defaultdict, deque
 from itertools import count
-from typing import List, Set, Tuple
+from typing import (
+    Any, DefaultDict, Dict, FrozenSet, List, Optional, Set, Tuple
+)
 
 from .core import Empty, Regex
 from .partition import CHARSET_END, Partition, make_merge_fn
@@ -29,7 +31,7 @@ class Vector:
 
     def transitions(self) -> Transitions:
         tags: List[str] = []
-        partial = [(CHARSET_END, [])]
+        partial: Partition[List[Regex]] = [(CHARSET_END, [])]
         for tag, regex in self._items:
             tags.append(tag)
             partial = merge_partial(partial, regex.derivatives())
@@ -60,11 +62,13 @@ class Vector:
         return hash((Vector, tuple(self._items)))
 
 
-def make_dfa(vector):
-    state_map = defaultdict(count().__next__)
+def make_dfa(vector: Vector
+             ) -> Tuple[int, Dict[int, Dict[str, int]], List[int], List[str],
+                        Dict[int, List[str]]]:
+    state_map: DefaultDict[Vector, int] = defaultdict(count().__next__)
     start = state_map[vector]
     queue = deque([(state_map[vector], vector)])
-    delta = {}
+    delta: Dict[int, Dict[str, int]] = {}
     tags = {}
     accepting = []
     alphabet = sorted(vector.alphabet())
@@ -91,10 +95,10 @@ def make_dfa(vector):
     return start, delta, accepting, alphabet, tags
 
 
-def inplace_refine(target, refiner):
+def inplace_refine(target: Set[int], refiner: Set[int]) -> Optional[Set[int]]:
     common = target & refiner
     if not common:
-        return
+        return None
     if len(common) * 2 < len(target):
         target.difference_update(refiner)
         return common
@@ -103,22 +107,25 @@ def inplace_refine(target, refiner):
     return distinct
 
 
-def reverse_delta(delta):
-    rev_delta = {s: {} for s in delta}
+def reverse_delta(delta: Dict[int, Dict[str, int]]
+                  ) -> Dict[int, Dict[str, Set[int]]]:
+    rev_delta: Dict[int, Dict[str, Set[int]]] = {s: {} for s in delta}
     for s, cn in delta.items():
         for c, n in cn.items():
             rev_delta[n].setdefault(c, set()).add(s)
     return rev_delta
 
 
-def follow_set(state, char, delta):
-    result = set()
+def follow_set(state: Set[int], char: str,
+               delta: Dict[int, Dict[str, Set[int]]]) -> Set[int]:
+    result: Set[int] = set()
     for s in state:
-        result.update(delta.get(s, {}).get(char, ()))
+        result.update(delta.get(s, {}).get(char, set()))
     return result
 
 
-def absorbing_states(rev_delta, accepting):
+def absorbing_states(rev_delta: Dict[int, Dict[str, Set[int]]],
+                     accepting: List[int]) -> Set[int]:
     absorbing = set(rev_delta) - set(accepting)
     queue = deque(accepting)
     while queue:
@@ -131,12 +138,16 @@ def absorbing_states(rev_delta, accepting):
     return absorbing
 
 
-def minimize_dfa(start, delta, accepting, alphabet, tags):
+def minimize_dfa(start: int, delta: Dict[int, Dict[str, int]],
+                 accepting: List[int], alphabet: List[str],
+                 tags: Dict[int, List[str]]
+                 ) -> Tuple[int, Dict[int, Dict[str, int]], List[int],
+                            List[str], Dict[int, List[str]]]:
     rev_delta = reverse_delta(delta)
     absorbing = absorbing_states(rev_delta, accepting)
 
-    nacc = {}
-    acc = {}
+    nacc: Dict[FrozenSet[str], Set[int]] = {}
+    acc: Dict[FrozenSet[str], Set[int]] = {}
     for state in delta:
         if state in absorbing:
             continue
@@ -150,9 +161,9 @@ def minimize_dfa(start, delta, accepting, alphabet, tags):
     queue = deque(acc.values())
 
     while queue:
-        state = queue.popleft()
+        state_tmp = queue.popleft()
         for char in alphabet:
-            refiner = follow_set(state, char, rev_delta)
+            refiner = follow_set(state_tmp, char, rev_delta)
             if refiner:
                 for target in partition[:]:
                     refined = inplace_refine(target, refiner)
@@ -160,18 +171,18 @@ def minimize_dfa(start, delta, accepting, alphabet, tags):
                         partition.append(refined)
                         queue.append(refined)
 
-    partition = sorted(tuple(sorted(s)) for s in partition)
-    state_map = {}
-    new_tags = {}
-    for i, state in enumerate(partition):
-        new_tags[i] = set()
-        for s in state:
+    partition_new = sorted(tuple(sorted(s)) for s in partition)
+    state_map: Dict[int, int] = {}
+    new_tags: Dict[int, List[str]] = {}
+    for i, state_new in enumerate(partition_new):
+        new_tags[i] = []
+        for s in state_new:
             state_map[s] = i
     new_start = 0
-    new_accepting = []
-    new_delta = {}
-    for i, state in enumerate(partition):
-        state = state[0]
+    new_accepting: List[int] = []
+    new_delta: Dict[int, Dict[str, int]] = {}
+    for i, state_new in enumerate(partition_new):
+        state = state_new[0]
         new_delta[i] = {}
         new_tags[i] = tags[state]
         if state in accepting:
@@ -184,7 +195,9 @@ def minimize_dfa(start, delta, accepting, alphabet, tags):
 
 class DFA(Regex):
 
-    def __init__(self, start, delta, accepting, alphabet, tags):
+    def __init__(self, start: int, delta: Dict[int, Dict[str, int]],
+                 accepting: List[int], alphabet: List[str],
+                 tags: Dict[int, List[str]]):
         self._start = start
         self._delta = delta
         self._accepting = accepting
@@ -192,44 +205,47 @@ class DFA(Regex):
         self._tags = tags
 
     @classmethod
-    def from_vector(cls, vector):
+    def from_vector(cls, vector: Vector) -> 'DFA':
         return DFA(*minimize_dfa(*make_dfa(vector)))
 
-    def __str__(self):
+    def __str__(self) -> str:
         return "{{{{DFA({})}}}}".format(len(self._delta))
 
-    def nullable(self):
+    def nullable(self) -> bool:
         return self._start in self._accepting
 
-    def alphabet(self):
+    def alphabet(self) -> Set[str]:
         return set(self._alphabet)
 
-    def derive(self, char):
+    def derive(self, char: str) -> Regex:
         delta = self._delta[self._start]
         if char in delta:
             return DFA(delta[char], self._delta, self._accepting,
                        self._alphabet, self._tags)
         return Empty()
 
-    def choices(self):
+    def choices(self) -> Set[Regex]:
         return set([self])
 
-    def tags(self):
+    def tags(self) -> List[str]:
         return self._tags[self._start]
 
-    def _key(self):
+    def _key(self) -> Tuple[Any, ...]:
         return (self._start, id(self._delta), id(self._accepting),
                 id(self._alphabet), id(self._tags))
 
-    def conflicts(self):
+    def conflicts(self) -> Set[Tuple[str, ...]]:
         return set(tuple(sorted(tags))
                    for tags in self._tags.values() if len(tags) > 1)
 
-    def compact(self):
-        def char_ranges(chars):
-            ranges = []
-            start = None
-            end = None
+    def compact(self) -> Tuple[int,
+                               Dict[int,
+                                    Dict[Tuple[Tuple[str, str], ...], int]],
+                               List[int], Dict[int, List[str]]]:
+        def char_ranges(chars: List[str]) -> Tuple[Tuple[str, str], ...]:
+            ranges: List[Tuple[str, str]] = []
+            start = ''
+            end = ''
             for char in sorted(chars):
                 if start is None:
                     start = end = char
@@ -242,32 +258,32 @@ class DFA(Regex):
             return tuple(ranges)
 
         c_tags = {k: v for k, v in self._tags.items() if v}
-        c_delta = {}
+        c_delta: Dict[int, Dict[Tuple[Tuple[str, str], ...], int]] = {}
         for state, delta in self._delta.items():
             c_delta[state] = {}
-            delta_chars = {}
+            delta_chars: Dict[int, List[str]] = {}
             for char, next_state in delta.items():
                 delta_chars.setdefault(next_state, []).append(char)
             for next_state, chars in delta_chars.items():
                 c_delta[state][char_ranges(chars)] = next_state
         return self._start, c_delta, self._accepting, c_tags
 
-    def dot(self):
+    def dot(self) -> str:
         start, delta, accepting, tags = self.compact()
         d = ["digraph dfa {", "  rankdir=LR",
              '  "" [shape=none]', '  "" -> "{}"'.format(start)]
 
-        def fmt_ranges(rs):
+        def fmt_ranges(rs: Tuple[Tuple[str, str], ...]) -> str:
             fmt = []
 
-            def fmt_range(r):
+            def fmt_range(r: Tuple[str, str]) -> str:
                 if r[0] == r[1]:
                     return fmt_char(r[0])
                 if ord(r[0]) + 1 == ord(r[1]):
                     return fmt_char(r[0]) + fmt_char(r[1])
                 return "{}-{}".format(fmt_char(r[0]), fmt_char(r[1]))
 
-            def fmt_char(c):
+            def fmt_char(c: str) -> str:
                 if c < chr(32) or c > chr(126):
                     return "\\\\x{:02x}".format(ord(c))
                 if c in "[]-\\'\"":
