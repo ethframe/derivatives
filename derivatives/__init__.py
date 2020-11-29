@@ -1,6 +1,6 @@
 from .core import (
     AnyChar, Char, CharRange, CharSet, Choice, Empty, Epsilon, Intersect,
-    Invert, Repeat, Sequence, Subtract, Tag
+    Invert, Repeat, Sequence, Subtract
 )
 from .dfa import DFA
 from .edsl import any_with, any_without, string

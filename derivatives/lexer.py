@@ -1,15 +1,9 @@
-from .core import Empty, Tag
-from .dfa import DFA
+from .core import Empty
+from .dfa import DFA, Vector
 
 
 def make_lexer(tokens):
-    regex = Empty()
-    parts = Empty()
-    for name, tok in tokens:
-        tok = DFA.from_regex(tok)
-        regex |= DFA.from_regex(((tok - parts) * Tag(name)))
-        parts |= tok
-    return DFA.from_regex(regex)
+    return DFA.from_vector(Vector(tokens))
 
 
 def lex_once(regex, string):
@@ -22,7 +16,7 @@ def lex_once(regex, string):
             tag = tags
             pos = i + 1
         if isinstance(regex, Empty):
-            return pos, tag
+            break
     return pos, tag
 
 

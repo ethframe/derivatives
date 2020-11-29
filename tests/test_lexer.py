@@ -100,8 +100,9 @@ def c_lexer(c_tokens):
 
 def c_lex(c_lexer, string):
     for tags, value in lex_all(c_lexer, string):
-        if "space" not in tags:
-            yield tags, value
+        tag = tags[0]
+        if tag != "space":
+            yield {tag}, value
 
 
 TEST_SOURCE = """

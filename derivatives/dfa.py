@@ -1,23 +1,56 @@
 from collections import defaultdict, deque
 from itertools import count
+from typing import List, Set, Tuple
 
 from .core import Empty, Regex
 
 
-def make_dfa(regex):
+class Vector:
+    def __init__(self, items: List[Tuple[str, Regex]]):
+        self._items = items
+
+    def alphabet(self) -> Set[str]:
+        result: Set[str] = set()
+        for _, regex in self._items:
+            result |= regex.alphabet()
+        return result
+
+    def first(self) -> Set[str]:
+        result: Set[str] = set()
+        for _, regex in self._items:
+            result |= regex.first()
+        return result
+
+    def derive(self, char: str) -> 'Vector':
+        return Vector(
+            [(tag, regex.derive(char)) for tag, regex in self._items])
+
+    def tags(self) -> List[str]:
+        return [tag for tag, regex in self._items if regex.nullable()]
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Vector):
+            return NotImplemented
+        return self._items == other._items
+
+    def __hash__(self) -> int:
+        return hash((Vector, tuple(self._items)))
+
+
+def make_dfa(vector):
     state_map = defaultdict(count().__next__)
-    start = state_map[regex]
-    queue = deque([(state_map[regex], regex)])
+    start = state_map[vector]
+    queue = deque([(state_map[vector], vector)])
     delta = {}
     tags = {}
     accepting = []
-    alphabet = sorted(regex.alphabet())
+    alphabet = sorted(vector.alphabet())
 
     while queue:
         state_index, state = queue.popleft()
         delta[state_index] = {}
-        tags[state_index] = state.tags()
-        if state.nullable():
+        state_tags = tags[state_index] = state.tags()
+        if state_tags:
             accepting.append(state_index)
         for char in state.first():
             next_state = state.derive(char)
@@ -133,10 +166,8 @@ class DFA(Regex):
         self._tags = tags
 
     @classmethod
-    def from_regex(cls, regex):
-        if isinstance(regex, DFA):
-            return regex
-        return DFA(*minimize_dfa(*make_dfa(regex)))
+    def from_vector(cls, vector):
+        return DFA(*minimize_dfa(*make_dfa(vector)))
 
     def __str__(self):
         return "{{{{DFA({})}}}}".format(len(self._delta))

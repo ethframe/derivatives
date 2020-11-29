@@ -1,4 +1,5 @@
-from derivatives import DFA, Char, CharRange, Tag, string
+from derivatives.lexer import make_lexer
+from derivatives import Char, CharRange, string
 
 
 def test_conflicts():
@@ -9,6 +10,11 @@ def test_conflicts():
     re_b = (num * Char(" ")).opt() * string("test")
     re_c = string("test test")
     re_d = (num * word * Char(" ")) * string("test")
-    comm = (re_a * Tag("A") | re_b * Tag("B") |
-            re_c * Tag("C") | re_d * Tag("D"))
-    assert DFA.from_regex(comm).conflicts() == {('A', 'B'), ('A', 'C')}
+    tokens = [
+        ("A", re_a),
+        ("B", re_b),
+        ("C", re_c),
+        ("D", re_d),
+    ]
+
+    assert make_lexer(tokens).conflicts() == {('A', 'B'), ('A', 'C')}

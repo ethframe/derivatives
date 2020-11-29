@@ -16,7 +16,7 @@ class Regex:
         raise NotImplementedError()
 
     def tags(self):
-        raise NotImplementedError()
+        return []
 
     def choices(self):
         raise NotImplementedError()
@@ -103,9 +103,6 @@ class Empty(Regex):
     def derive(self, char):
         return self
 
-    def tags(self):
-        return set()
-
     def choices(self):
         return set()
 
@@ -142,9 +139,6 @@ class Epsilon(Regex):
     def derive(self, char):
         return Empty()
 
-    def tags(self):
-        return set()
-
     def choices(self):
         return set([self])
 
@@ -153,36 +147,6 @@ class Epsilon(Regex):
 
     def _key(self):
         return ()
-
-
-class Tag(Regex):
-
-    def __init__(self, tag):
-        self._tag = tag
-
-    def __str__(self):
-        return "{{{}}}".format(self._tag)
-
-    def nullable(self):
-        return True
-
-    def alphabet(self):
-        return set()
-
-    def first(self):
-        return set()
-
-    def derive(self, char):
-        return Empty()
-
-    def tags(self):
-        return set([self._tag])
-
-    def choices(self):
-        return set([self])
-
-    def _key(self):
-        return (self._tag,)
 
 
 class AnyChar(Regex):
@@ -201,9 +165,6 @@ class AnyChar(Regex):
 
     def derive(self, char):
         return Epsilon()
-
-    def tags(self):
-        return set()
 
     def choices(self):
         return set([self])
@@ -238,9 +199,6 @@ class Char(Regex):
             return Epsilon()
         return Empty()
 
-    def tags(self):
-        return set()
-
     def choices(self):
         return set([self])
 
@@ -274,9 +232,6 @@ class CharSet(Regex):
             return Epsilon()
         return Empty()
 
-    def tags(self):
-        return set()
-
     def choices(self):
         return set([self])
 
@@ -306,9 +261,6 @@ class CharRange(Regex):
         if self._start <= char <= self._end:
             return Epsilon()
         return Empty()
-
-    def tags(self):
-        return set()
 
     def choices(self):
         return set([self])
@@ -347,11 +299,6 @@ class Sequence(Regex):
                     self._second.derive(char))
         return self._first.derive(char) * self._second
 
-    def tags(self):
-        if self._first.nullable():
-            return self._first.tags() | self._second.tags()
-        return self._first.tags()
-
     def choices(self):
         return set([self])
 
@@ -388,9 +335,6 @@ class Choice(Regex):
     def derive(self, char):
         return self._first.derive(char) | self._second.derive(char)
 
-    def tags(self):
-        return self._first.tags() | self._second.tags()
-
     def choices(self):
         return self._first.choices() | self._second.choices()
 
@@ -420,9 +364,6 @@ class Repeat(Regex):
     def derive(self, char):
         return self._regex.derive(char) * self
 
-    def tags(self):
-        return self._regex.tags()
-
     def choices(self):
         return set([self])
 
@@ -451,10 +392,6 @@ class Invert(Regex):
 
     def derive(self, char):
         return ~self._regex.derive(char)
-
-    def tags(self):
-        # TODO: invert tags?
-        return set()
 
     def choices(self):
         return set([self])
@@ -489,9 +426,6 @@ class Intersect(Regex):
     def derive(self, char):
         return self._first.derive(char) & self._second.derive(char)
 
-    def tags(self):
-        return self._first.tags() & self._second.tags()
-
     def choices(self):
         return set([self])
 
@@ -524,9 +458,6 @@ class Subtract(Regex):
 
     def derive(self, char):
         return self._first.derive(char) - self._second.derive(char)
-
-    def tags(self):
-        return self._first.tags() - self._second.tags()
 
     def choices(self):
         return set([self])
