@@ -1,46 +1,12 @@
-from derivatives import *
+import pytest
+
+from derivatives import (
+    AnyChar, Char, CharRange, CharSet, any_without, lex_all, make_lexer, string
+)
 
 
-def string(s):
-    regex = Epsilon()
-    for c in s:
-        regex *= Char(c)
-    return regex
-
-
-def anywhere(regex):
-    return AnyChar().star() * regex * AnyChar().star()
-
-
-def no(regex):
-    return ~anywhere(regex)
-
-
-def make_lexer(tokens):
-    regex = Empty()
-    parts = Empty()
-    for name, tok in tokens:
-        tok = tok.dfa()
-        regex |= ((tok - parts) * Tag(name)).dfa()
-        parts |= tok
-    return regex.dfa()
-
-
-def lex_once(regex, string):
-    tag = regex.tags()
-    pos = 0
-    for i, char in enumerate(string):
-        regex = regex.derive(char)
-        tags = regex.tags()
-        if tags:
-            tag = tags
-            pos = i + 1
-        if isinstance(regex, Empty):
-            return pos, tag
-    return pos, tag
-
-
-def main():
+@pytest.fixture
+def c_tokens():
     # Adapted from http://www.quut.com/c/ANSI-C-grammar-l.html
     O = CharRange("0", "7")
     D = CharRange("0", "9")
@@ -62,7 +28,7 @@ def main():
     WS = CharSet(" \t\v\n\f")
 
     tokens = [
-        ("comment", string("/*") * no(string("*/")) * string("*/")),
+        ("comment", string("/*") * any_without(string("*/")) * string("*/")),
     ]
 
     keywords = [
@@ -124,64 +90,75 @@ def main():
     tokens.append(("space", WS.plus()))
     tokens.append(("bad", AnyChar()))
 
-    lexer = make_lexer(tokens)
-    with open("lexer.dot", "w") as fp:
-        fp.write(lexer.dot())
+    return tokens
 
-    source = """
-int yywrap(void)        /* called at end of input */
+
+@pytest.fixture
+def c_lexer(c_tokens):
+    return make_lexer(c_tokens)
+
+
+def c_lex(c_lexer, string):
+    for tags, value in lex_all(c_lexer, string):
+        tag = tags[0]
+        if tag != "space":
+            yield tag, value
+
+
+TEST_SOURCE = """
+size_t strlen(const char *s)
 {
-    return 1;           /* terminate now */
+    /** Simple strlen function **/
+    size_t i;
+    for (i = 0; s[i] != '\0'; i++);
+    return i;
 }
+"""
 
-static void comment(void)
-{
-    int c;
-
-    while ((c = input()) != 0)
-        if (c == '*')
-        {
-            while ((c = input()) == '*')
-                ;
-
-            if (c == '/')
-                return;
-
-            if (c == 0)
-                break;
-        }
-    yyerror("unterminated comment");
-}
-
-static int check_type(void)
-{
-    switch (sym_type(yytext))
-    {
-    case TYPEDEF_NAME:                /* previously defined */
-        return TYPEDEF_NAME;
-    case ENUMERATION_CONSTANT:        /* previously defined */
-        return ENUMERATION_CONSTANT;
-    default:                          /* includes undefined */
-        return IDENTIFIER;
-    }
-}"""
-    while source:
-        pos, tag = lex_once(lexer, source)
-        if "space" not in tag:
-            print(tag, repr(source[:pos]))
-        source = source[pos:]
-
-    word = CharRange("a", "z").plus()
-    num = CharRange("0", "9").plus()
-
-    re_a = (word * Char(" ")).opt() * string("test")
-    re_b = (num * Char(" ")).opt() * string("test")
-    re_c = string("test test")
-    re_d = (num * word * Char(" ")) * string("test")
-    comm = (re_a * Tag("A") | re_b * Tag("B") |
-            re_c * Tag("C") | re_d * Tag("D"))
-    print(comm.dfa().conflicts())
+TEST_TOKENS = [
+# size_t strlen(const char *s)
+    ('ident', 'size_t'),
+    ('ident', 'strlen'),
+    ('lparen', '('),
+    ('const', 'const'),
+    ('char', 'char'),
+    ('mulop', '*'),
+    ('ident', 's'),
+    ('rparen', ')'),
+# {
+    ('lbrace', '{'),
+# /** Simple strlen function **/
+    ('comment', '/** Simple strlen function **/'),
+# size_t i;
+    ('ident', 'size_t'),
+    ('ident', 'i'),
+    ('semicolon', ';'),
+# for (i = 0; s[i] != '\0'; i++) ;
+    ('for', 'for'),
+    ('lparen', '('),
+    ('ident', 'i'),
+    ('assign', '='),
+    ('octconst', '0'),
+    ('semicolon', ';'),
+    ('ident', 's'),
+    ('lbracket', '['),
+    ('ident', 'i'),
+    ('rbracket', ']'),
+    ('neop', '!='),
+    ('charconst', "'\x00'"),
+    ('semicolon', ';'),
+    ('ident', 'i'),
+    ('incop', '++'),
+    ('rparen', ')'),
+    ('semicolon', ';'),
+# return i;
+    ('return', 'return'),
+    ('ident', 'i'),
+    ('semicolon', ';'),
+# }
+    ('rbrace', '}'),
+]
 
 
-if __name__ == '__main__':
-    main()
+def test_lexer(c_lexer):
+    assert list(c_lex(c_lexer, TEST_SOURCE)) == TEST_TOKENS
