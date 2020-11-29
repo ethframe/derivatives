@@ -1,21 +1,6 @@
 from derivatives import (
-    DFA, AnyChar, Char, CharRange, CharSet, Empty, Epsilon, Tag
+    DFA, AnyChar, Char, CharRange, CharSet, Empty, Tag, any_without, string
 )
-
-
-def string(s):
-    regex = Epsilon()
-    for c in s:
-        regex *= Char(c)
-    return regex
-
-
-def anywhere(regex):
-    return AnyChar().star() * regex * AnyChar().star()
-
-
-def no(regex):
-    return ~anywhere(regex)
 
 
 def make_lexer(tokens):
@@ -64,7 +49,7 @@ def main():
     WS = CharSet(" \t\v\n\f")
 
     tokens = [
-        ("comment", string("/*") * no(string("*/")) * string("*/")),
+        ("comment", string("/*") * any_without(string("*/")) * string("*/")),
     ]
 
     keywords = [

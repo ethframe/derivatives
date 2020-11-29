@@ -3,3 +3,4 @@ from .core import (
     Invert, Repeat, Sequence, Subtract, Tag
 )
 from .dfa import DFA
+from .edsl import any_with, any_without, string
