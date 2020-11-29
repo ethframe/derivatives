@@ -102,7 +102,7 @@ def c_lex(c_lexer, string):
     for tags, value in lex_all(c_lexer, string):
         tag = tags[0]
         if tag != "space":
-            yield {tag}, value
+            yield tag, value
 
 
 TEST_SOURCE = """
@@ -116,44 +116,44 @@ size_t strlen(const char *s)
 
 TEST_TOKENS = [
 # size_t strlen(const char *s)
-    ({'ident'}, 'size_t'),
-    ({'ident'}, 'strlen'),
-    ({'lparen'}, '('),
-    ({'const'}, 'const'),
-    ({'char'}, 'char'),
-    ({'mulop'}, '*'),
-    ({'ident'}, 's'),
-    ({'rparen'}, ')'),
+    ('ident', 'size_t'),
+    ('ident', 'strlen'),
+    ('lparen', '('),
+    ('const', 'const'),
+    ('char', 'char'),
+    ('mulop', '*'),
+    ('ident', 's'),
+    ('rparen', ')'),
 # {
-    ({'lbrace'}, '{'),
+    ('lbrace', '{'),
 # size_t i;
-    ({'ident'}, 'size_t'),
-    ({'ident'}, 'i'),
-    ({'semicolon'}, ';'),
+    ('ident', 'size_t'),
+    ('ident', 'i'),
+    ('semicolon', ';'),
 # for (i = 0; s[i] != '\0'; i++) ;
-    ({'for'}, 'for'),
-    ({'lparen'}, '('),
-    ({'ident'}, 'i'),
-    ({'assign'}, '='),
-    ({'octconst'}, '0'),
-    ({'semicolon'}, ';'),
-    ({'ident'}, 's'),
-    ({'lbracket'}, '['),
-    ({'ident'}, 'i'),
-    ({'rbracket'}, ']'),
-    ({'neop'}, '!='),
-    ({'charconst'}, "'\x00'"),
-    ({'semicolon'}, ';'),
-    ({'ident'}, 'i'),
-    ({'incop'}, '++'),
-    ({'rparen'}, ')'),
-    ({'semicolon'}, ';'),
+    ('for', 'for'),
+    ('lparen', '('),
+    ('ident', 'i'),
+    ('assign', '='),
+    ('octconst', '0'),
+    ('semicolon', ';'),
+    ('ident', 's'),
+    ('lbracket', '['),
+    ('ident', 'i'),
+    ('rbracket', ']'),
+    ('neop', '!='),
+    ('charconst', "'\x00'"),
+    ('semicolon', ';'),
+    ('ident', 'i'),
+    ('incop', '++'),
+    ('rparen', ')'),
+    ('semicolon', ';'),
 # return i;
-    ({'return'}, 'return'),
-    ({'ident'}, 'i'),
-    ({'semicolon'}, ';'),
+    ('return', 'return'),
+    ('ident', 'i'),
+    ('semicolon', ';'),
 # }
-    ({'rbrace'}, '}'),
+    ('rbrace', '}'),
 ]
 
 
