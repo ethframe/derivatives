@@ -1,4 +1,6 @@
-from derivatives import *
+from derivatives import (
+    DFA, AnyChar, Char, CharRange, CharSet, Empty, Epsilon, Tag
+)
 
 
 def string(s):
@@ -20,10 +22,10 @@ def make_lexer(tokens):
     regex = Empty()
     parts = Empty()
     for name, tok in tokens:
-        tok = tok.dfa()
-        regex |= ((tok - parts) * Tag(name)).dfa()
+        tok = DFA.from_regex(tok)
+        regex |= DFA.from_regex(((tok - parts) * Tag(name)))
         parts |= tok
-    return regex.dfa()
+    return DFA.from_regex(regex)
 
 
 def lex_once(regex, string):
@@ -180,7 +182,7 @@ static int check_type(void)
     re_d = (num * word * Char(" ")) * string("test")
     comm = (re_a * Tag("A") | re_b * Tag("B") |
             re_c * Tag("C") | re_d * Tag("D"))
-    print(comm.dfa().conflicts())
+    print(DFA.from_regex(comm).conflicts())
 
 
 if __name__ == '__main__':
