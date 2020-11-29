@@ -3,27 +3,50 @@ from itertools import count
 from typing import List, Set, Tuple
 
 from .core import Empty, Regex
+from .partition import CHARSET_END, Partition, make_merge_fn
+
+
+def merge_partial_item(acc: List[Regex], val: Regex) -> List[Regex]:
+    acc_copy = acc.copy()
+    acc_copy.append(val)
+    return acc_copy
+
+
+def merge_partial_item_inplace(acc: List[Regex], val: Regex) -> List[Regex]:
+    acc.append(val)
+    return acc
+
+
+merge_partial = make_merge_fn(merge_partial_item, merge_partial_item_inplace)
+
+
+Transitions = Partition['Vector']
 
 
 class Vector:
     def __init__(self, items: List[Tuple[str, Regex]]):
         self._items = items
 
+    def transitions(self) -> Transitions:
+        tags: List[str] = []
+        partial = [(CHARSET_END, [])]
+        for tag, regex in self._items:
+            tags.append(tag)
+            partial = merge_partial(partial, regex.derivatives())
+        return [
+            (end, Vector([(tag, regex) for tag, regex in zip(tags, regexes)
+                          if not isinstance(regex, Empty)]))
+            for end, regexes in partial
+        ]
+
+    def empty(self) -> bool:
+        return all(isinstance(regex, Empty) for _, regex in self._items)
+
     def alphabet(self) -> Set[str]:
         result: Set[str] = set()
         for _, regex in self._items:
             result |= regex.alphabet()
         return result
-
-    def first(self) -> Set[str]:
-        result: Set[str] = set()
-        for _, regex in self._items:
-            result |= regex.first()
-        return result
-
-    def derive(self, char: str) -> 'Vector':
-        return Vector(
-            [(tag, regex.derive(char)) for tag, regex in self._items])
 
     def tags(self) -> List[str]:
         return [tag for tag, regex in self._items if regex.nullable()]
@@ -48,19 +71,22 @@ def make_dfa(vector):
 
     while queue:
         state_index, state = queue.popleft()
-        delta[state_index] = {}
+        state_delta = delta[state_index] = {}
         state_tags = tags[state_index] = state.tags()
         if state_tags:
             accepting.append(state_index)
-        for char in state.first():
-            next_state = state.derive(char)
-            if isinstance(next_state, Empty):
+        last = 0
+        for end, next_state in state.transitions():
+            if next_state.empty():
+                last = end
                 continue
             sm_len = len(state_map)
             next_index = state_map[next_state]
             if sm_len != len(state_map):
                 queue.append((next_index, next_state))
-            delta[state_index][char] = next_index
+            for char in range(last, end):
+                state_delta[chr(char)] = next_index
+            last = end
 
     return start, delta, accepting, alphabet, tags
 
@@ -177,9 +203,6 @@ class DFA(Regex):
 
     def alphabet(self):
         return set(self._alphabet)
-
-    def first(self):
-        return set(self._delta[self._start])
 
     def derive(self, char):
         delta = self._delta[self._start]
