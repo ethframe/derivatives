@@ -154,100 +154,55 @@ class Epsilon(Regex):
         return ()
 
 
-class AnyChar(Regex):
+class CharRanges(Regex):
+    def __init__(self, ranges):
+        self._ranges = ranges
 
     def __str__(self):
-        return "."
-
-    def nullable(self):
-        return False
-
-    def alphabet(self):
-        return set(chr(i) for i in range(CHARSET_END))
-
-    def derive(self, char):
-        return Epsilon()
-
-    def derivatives(self) -> Derivatives:
-        return [(CHARSET_END, Epsilon())]
-
-    def choices(self):
-        return set([self])
-
-    def _key(self):
-        return ()
-
-
-class Char(Regex):
-
-    def __init__(self, char):
-        self._char = char
-
-    def __str__(self):
-        def maybe_escape(char):
+        def from_code(code):
+            char = chr(code)
             if char in "\\{}()+|&~*?.[]":
                 return "\\" + char
             return char
-        return maybe_escape(self._char)
+        if len(self._ranges) == 1:
+            start, end = self._ranges[0]
+            if start == 0 and end == CHARSET_END:
+                return "."
+            if end - start == 1:
+                return from_code(start)
+        parts = []
+        for start, end in self._ranges:
+            num = end - start
+            if num == 1:
+                parts.append(from_code(start))
+            elif num == 2:
+                parts.append(from_code(start) + from_code(start + 1))
+            else:
+                parts.append(from_code(start) + '-' + from_code(end - 1))
+        return '[' + ''.join(parts) + ']'
 
     def nullable(self):
         return False
 
     def alphabet(self):
-        return set([self._char])
-
-    def derive(self, char):
-        if char == self._char:
-            return Epsilon()
-        return Empty()
-
-    def derivatives(self) -> Derivatives:
-        result: Derivatives = []
-        start = ord(self._char)
-        end = start + 1
-        if start > 0:
-            result.append((start, Empty()))
-        result.append((end, Epsilon()))
-        if CHARSET_END > end:
-            result.append((CHARSET_END, Empty()))
+        result = set()
+        for start, end in self._ranges:
+            result.update(chr(c) for c in range(start, end))
         return result
 
-    def choices(self):
-        return set([self])
-
-    def _key(self):
-        return (self._char,)
-
-
-class CharSet(Regex):
-
-    def __init__(self, chars):
-        self._chars = chars
-
-    def __str__(self):
-        def maybe_escape(char):
-            if char in "\\{}()+|&~*?.[]":
-                return "\\" + char
-            return char
-        return "[{}]".format("".join(map(maybe_escape, self._chars)))
-
-    def nullable(self):
-        return False
-
-    def alphabet(self):
-        return set(self._chars)
-
     def derive(self, char):
-        if char in self._chars:
-            return Epsilon()
+        code = ord(char)
+        for start, end in self._ranges:
+            if start <= code < end:
+                return Epsilon()
+            if start > code:
+                break
         return Empty()
 
     def derivatives(self) -> Derivatives:
         result: Derivatives = []
         last = 0
-        for char in sorted(self._chars):
-            start = ord(char)
-            end = start + 1
+        for start, end in self._ranges:
             if start > last:
                 result.append((start, Empty()))
             result.append((end, Epsilon()))
@@ -260,45 +215,34 @@ class CharSet(Regex):
         return set([self])
 
     def _key(self):
-        return (self._chars,)
+        return (tuple(self._ranges,))
 
 
-class CharRange(Regex):
+def AnyChar():
+    return CharRanges([(0, CHARSET_END)])
 
-    def __init__(self, start, end):
-        self._start = start
-        self._end = end
 
-    def __str__(self):
-        return "[{}-{}]".format(self._start, self._end)
+def Char(char):
+    code = ord(char)
+    return CharRanges([(code, code + 1)])
 
-    def nullable(self):
-        return False
 
-    def alphabet(self):
-        return set(chr(i) for i in range(ord(self._start), ord(self._end) + 1))
+def CharSet(chars):
+    ranges = []
+    last_end = None
+    for char in sorted(chars):
+        code = ord(char)
+        if last_end and last_end == code:
+            last_end = code + 1
+            ranges[-1] = (ranges[-1][0], last_end)
+        else:
+            last_end = code + 1
+            ranges.append((code, last_end))
+    return CharRanges(ranges)
 
-    def derive(self, char):
-        if self._start <= char <= self._end:
-            return Epsilon()
-        return Empty()
 
-    def derivatives(self) -> Derivatives:
-        result: Derivatives = []
-        start = ord(self._start)
-        end = ord(self._end) + 1
-        if start > 0:
-            result.append((start, Empty()))
-        result.append((end, Epsilon()))
-        if CHARSET_END > end:
-            result.append((CHARSET_END, Empty()))
-        return result
-
-    def choices(self):
-        return set([self])
-
-    def _key(self):
-        return (self._start, self._end)
+def CharRange(start, end):
+    return CharRanges([(ord(start), ord(end) + 1)])
 
 
 def append_item(left: Regex, right: Regex) -> Regex:
@@ -396,7 +340,7 @@ class Repeat(Regex):
         self._regex = regex
 
     def __str__(self):
-        if isinstance(self._regex, (Empty, Epsilon, Char, Repeat)):
+        if isinstance(self._regex, (Empty, Epsilon, CharRanges, Repeat)):
             return str(self._regex) + "*"
         return "({})*".format(self._regex)
 
@@ -425,7 +369,7 @@ class Invert(Regex):
         self._regex = regex
 
     def __str__(self):
-        if isinstance(self._regex, (Empty, Epsilon, Char, Invert)):
+        if isinstance(self._regex, (Empty, Epsilon, CharRanges, Invert)):
             return "~" + str(self._regex)
         return "~({})".format(self._regex)
 
