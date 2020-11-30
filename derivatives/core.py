@@ -5,6 +5,32 @@ from .partition import CHARSET_END, Partition, make_merge_fn, make_update_fn
 Derivatives = Partition['Regex']
 
 
+def merge_args(left: List['Regex'], right: List['Regex']) -> List['Regex']:
+    result: List[Regex] = []
+    lit = iter(left)
+    rit = iter(right)
+    lval = next(lit, None)
+    rval = next(rit, None)
+    while lval is not None and rval is not None:
+        if lval == rval:
+            result.append(lval)
+            lval = next(lit, None)
+            rval = next(rit, None)
+        elif lval < rval:
+            result.append(lval)
+            lval = next(lit, None)
+        else:
+            result.append(rval)
+            rval = next(rit, None)
+    if lval is not None:
+        result.append(lval)
+        result.extend(lit)
+    elif rval is not None:
+        result.append(rval)
+        result.extend(rit)
+    return result
+
+
 class Regex:
 
     def __str__(self) -> str:
@@ -25,7 +51,7 @@ class Regex:
     def tags(self) -> List[str]:
         return []
 
-    def choices(self) -> Set['Regex']:
+    def choices(self) -> List['Regex']:
         raise NotImplementedError()
 
     def __mul__(self, other: object) -> 'Regex':
@@ -41,7 +67,7 @@ class Regex:
         if isinstance(other, Empty):
             return self
         if isinstance(other, Regex):
-            choices = sorted(self.choices() | other.choices())
+            choices = merge_args(self.choices(), other.choices())
             regex = choices[0]
             for choice in choices[1:]:
                 regex = Choice(regex, choice)
@@ -120,8 +146,8 @@ class Empty(Regex):
     def derivatives(self) -> Derivatives:
         return [(CHARSET_END, Empty())]
 
-    def choices(self) -> Set[Regex]:
-        return set()
+    def choices(self) -> List[Regex]:
+        return []
 
     def __mul__(self, other: object) -> Regex:
         return self
@@ -158,8 +184,8 @@ class Epsilon(Regex):
     def derivatives(self) -> Derivatives:
         return [(CHARSET_END, Empty())]
 
-    def choices(self) -> Set[Regex]:
-        return set([self])
+    def choices(self) -> List[Regex]:
+        return [self]
 
     def __mul__(self, other: object) -> Regex:
         if isinstance(other, Regex):
@@ -227,8 +253,8 @@ class CharRanges(Regex):
             result.append((CHARSET_END, Empty()))
         return result
 
-    def choices(self) -> Set[Regex]:
-        return set([self])
+    def choices(self) -> List[Regex]:
+        return [self]
 
     def _key(self) -> Tuple[Any, ...]:
         return (tuple(self._ranges,))
@@ -306,8 +332,8 @@ class Sequence(Regex):
             result = merge_choice(result, self._second.derivatives())
         return result
 
-    def choices(self) -> Set[Regex]:
-        return set([self])
+    def choices(self) -> List[Regex]:
+        return [self]
 
     def __mul__(self, other: object) -> Regex:
         return self._first * (self._second * other)
@@ -343,8 +369,8 @@ class Choice(Regex):
         return merge_choice(self._first.derivatives(),
                             self._second.derivatives())
 
-    def choices(self) -> Set[Regex]:
-        return self._first.choices() | self._second.choices()
+    def choices(self) -> List[Regex]:
+        return self._first.choices() + self._second.choices()
 
     def _key(self) -> Tuple[Any, ...]:
         return (self._first, self._second)
@@ -372,8 +398,8 @@ class Repeat(Regex):
     def derivatives(self) -> Derivatives:
         return append_items(self._regex.derivatives(), self)
 
-    def choices(self) -> Set[Regex]:
-        return set([self])
+    def choices(self) -> List[Regex]:
+        return [self]
 
     def _key(self) -> Tuple[Any, ...]:
         return (self._regex,)
@@ -401,8 +427,8 @@ class Invert(Regex):
     def derivatives(self) -> Derivatives:
         return [(end, ~item) for end, item in self._regex.derivatives()]
 
-    def choices(self) -> Set[Regex]:
-        return set([self])
+    def choices(self) -> List[Regex]:
+        return [self]
 
     def _key(self) -> Tuple[Any, ...]:
         return (self._regex,)
@@ -442,8 +468,8 @@ class Intersect(Regex):
         return merge_intersect(self._first.derivatives(),
                                self._second.derivatives())
 
-    def choices(self) -> Set[Regex]:
-        return set([self])
+    def choices(self) -> List[Regex]:
+        return [self]
 
     def _key(self) -> Tuple[Any, ...]:
         return (self._first, self._second)
@@ -483,8 +509,8 @@ class Subtract(Regex):
         return merge_subtract(self._first.derivatives(),
                               self._second.derivatives())
 
-    def choices(self) -> Set[Regex]:
-        return set([self])
+    def choices(self) -> List[Regex]:
+        return [self]
 
     def _key(self) -> Tuple[Any, ...]:
         return (self._first, self._second)
