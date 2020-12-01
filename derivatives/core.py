@@ -39,17 +39,8 @@ class Regex:
     def nullable(self) -> bool:
         raise NotImplementedError()
 
-    def alphabet(self) -> Set[str]:
-        raise NotImplementedError()
-
-    def derive(self, char: str) -> 'Regex':
-        raise NotImplementedError()
-
     def derivatives(self) -> Derivatives:
         raise NotImplementedError()
-
-    def tags(self) -> List[str]:
-        return []
 
     def choices(self) -> List['Regex']:
         raise NotImplementedError()
@@ -137,12 +128,6 @@ class Empty(Regex):
     def nullable(self) -> bool:
         return False
 
-    def alphabet(self) -> Set[str]:
-        return set()
-
-    def derive(self, char: str) -> Regex:
-        return self
-
     def derivatives(self) -> Derivatives:
         return [(CHARSET_END, Empty())]
 
@@ -174,12 +159,6 @@ class Epsilon(Regex):
 
     def nullable(self) -> bool:
         return True
-
-    def alphabet(self) -> Set[str]:
-        return set()
-
-    def derive(self, char: str) -> Regex:
-        return Empty()
 
     def derivatives(self) -> Derivatives:
         return [(CHARSET_END, Empty())]
@@ -225,21 +204,6 @@ class CharRanges(Regex):
 
     def nullable(self) -> bool:
         return False
-
-    def alphabet(self) -> Set[str]:
-        result: Set[str] = set()
-        for start, end in self._ranges:
-            result.update(chr(c) for c in range(start, end))
-        return result
-
-    def derive(self, char: str) -> Regex:
-        code = ord(char)
-        for start, end in self._ranges:
-            if start <= code < end:
-                return Epsilon()
-            if start > code:
-                break
-        return Empty()
 
     def derivatives(self) -> Derivatives:
         result: Derivatives = []
@@ -317,15 +281,6 @@ class Sequence(Regex):
     def nullable(self) -> bool:
         return self._first.nullable() and self._second.nullable()
 
-    def alphabet(self) -> Set[str]:
-        return self._first.alphabet() | self._second.alphabet()
-
-    def derive(self, char: str) -> Regex:
-        if self._first.nullable():
-            return (self._first.derive(char) * self._second |
-                    self._second.derive(char))
-        return self._first.derive(char) * self._second
-
     def derivatives(self) -> Derivatives:
         result = append_items(self._first.derivatives(), self._second)
         if self._first.nullable():
@@ -359,12 +314,6 @@ class Choice(Regex):
     def nullable(self) -> bool:
         return self._first.nullable() or self._second.nullable()
 
-    def alphabet(self) -> Set[str]:
-        return self._first.alphabet() | self._second.alphabet()
-
-    def derive(self, char: str) -> Regex:
-        return self._first.derive(char) | self._second.derive(char)
-
     def derivatives(self) -> Derivatives:
         return merge_choice(self._first.derivatives(),
                             self._second.derivatives())
@@ -389,12 +338,6 @@ class Repeat(Regex):
     def nullable(self) -> bool:
         return True
 
-    def alphabet(self) -> Set[str]:
-        return self._regex.alphabet()
-
-    def derive(self, char: str) -> Regex:
-        return self._regex.derive(char) * self
-
     def derivatives(self) -> Derivatives:
         return append_items(self._regex.derivatives(), self)
 
@@ -417,12 +360,6 @@ class Invert(Regex):
 
     def nullable(self) -> bool:
         return not self._regex.nullable()
-
-    def alphabet(self) -> Set[str]:
-        return set(chr(i) for i in range(CHARSET_END))
-
-    def derive(self, char: str) -> Regex:
-        return ~self._regex.derive(char)
 
     def derivatives(self) -> Derivatives:
         return [(end, ~item) for end, item in self._regex.derivatives()]
@@ -458,12 +395,6 @@ class Intersect(Regex):
     def nullable(self) -> bool:
         return self._first.nullable() and self._second.nullable()
 
-    def alphabet(self) -> Set[str]:
-        return self._first.alphabet() & self._second.alphabet()
-
-    def derive(self, char: str) -> Regex:
-        return self._first.derive(char) & self._second.derive(char)
-
     def derivatives(self) -> Derivatives:
         return merge_intersect(self._first.derivatives(),
                                self._second.derivatives())
@@ -498,12 +429,6 @@ class Subtract(Regex):
 
     def nullable(self) -> bool:
         return self._first.nullable() and not self._second.nullable()
-
-    def alphabet(self) -> Set[str]:
-        return self._first.alphabet() | self._second.alphabet()
-
-    def derive(self, char: str) -> Regex:
-        return self._first.derive(char) - self._second.derive(char)
 
     def derivatives(self) -> Derivatives:
         return merge_subtract(self._first.derivatives(),

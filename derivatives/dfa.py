@@ -42,12 +42,6 @@ class Vector:
     def empty(self) -> bool:
         return all(isinstance(regex, Empty) for _, regex in self._items)
 
-    def alphabet(self) -> Set[str]:
-        result: Set[str] = set()
-        for _, regex in self._items:
-            result |= regex.alphabet()
-        return result
-
     def tags(self) -> List[str]:
         return [tag for tag, regex in self._items if regex.nullable()]
 
