@@ -1,3 +1,4 @@
+import html
 from collections import defaultdict, deque
 from itertools import count
 from typing import Dict, List, Optional, Set, Tuple
@@ -91,6 +92,65 @@ class Dfa:
         return set(tuple(sorted(tags))
                    for tags in self._tags if tags and len(tags) > 1)
 
+    def to_dot(self) -> str:
+        def fmt_char(char: str) -> str:
+            if char in "\\-[]":
+                return "\\" + char
+            return html.escape(char).encode('unicode_escape').decode('ascii')
+
+        buf = [
+            "digraph dfa {",
+            "  rankdir=LR",
+            '  "" [shape=none]',
+            '  "" -> "0"'
+        ]
+
+        seen_tags: Set[str] = set()
+        for state, tags in enumerate(self._tags):
+            shape = 'circle'
+            if tags is not None:
+                shape = 'doublecircle'
+                seen_tags.update(tags)
+            buf.append(
+                '  "{}" [shape={} fixedsize=shape]'.format(state, shape)
+            )
+
+        for tag in sorted(seen_tags):
+            buf.append(
+                '  "t_{0}" [shape=rect style=dashed label="{0}"]'.format(tag)
+            )
+
+        for state, trantisions in enumerate(self._delta):
+            compact: Dict[int, List[Tuple[str, str]]] = defaultdict(list)
+            for start, end, target in trantisions:
+                compact[target].append((start, end))
+            for target, ranges in compact.items():
+                classes = []
+                for start, end in ranges:
+                    size = ord(end) - ord(start) + 1
+                    if size == 1:
+                        classes.append(fmt_char(start))
+                    elif size <= 3:
+                        classes.append(
+                            "".join(
+                                fmt_char(chr(c))
+                                for c in range(ord(start), ord(end) + 1)
+                            )
+                        )
+                    else:
+                        classes.append(fmt_char(start) + "-" + fmt_char(end))
+                label = "[{}]".format("".join(classes))
+                buf.append(
+                    '  "{}" -> "{}" [label=<{}>]'.format(state, target, label))
+            tags = self._tags[state]
+            if tags is not None:
+                for tag in tags:
+                    buf.append(
+                        '  "{}" -> "t_{}" [style=dashed]'.format(state, tag)
+                    )
+
+        buf.extend(["}", ""])
+        return "\n".join(buf)
 
 
 def make_dfa(vector: Vector) -> Dfa:
