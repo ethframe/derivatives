@@ -5,7 +5,7 @@ T = TypeVar('T')
 Partition = List[Tuple[int, T]]
 UNICODE_END = 0x110000
 ASCII_END = 0x100
-CHARSET_END = ASCII_END
+CHARSET_END = UNICODE_END
 
 
 U = TypeVar('U')

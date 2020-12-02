@@ -5,6 +5,32 @@ from .partition import CHARSET_END, Partition, make_merge_fn, make_update_fn
 Derivatives = Partition['Regex']
 
 
+def merge_args(left: List['Regex'], right: List['Regex']) -> List['Regex']:
+    result: List[Regex] = []
+    lit = iter(left)
+    rit = iter(right)
+    lval = next(lit, None)
+    rval = next(rit, None)
+    while lval is not None and rval is not None:
+        if lval == rval:
+            result.append(lval)
+            lval = next(lit, None)
+            rval = next(rit, None)
+        elif lval < rval:
+            result.append(lval)
+            lval = next(lit, None)
+        else:
+            result.append(rval)
+            rval = next(rit, None)
+    if lval is not None:
+        result.append(lval)
+        result.extend(lit)
+    elif rval is not None:
+        result.append(rval)
+        result.extend(rit)
+    return result
+
+
 class Regex:
 
     def __str__(self) -> str:
@@ -13,19 +39,10 @@ class Regex:
     def nullable(self) -> bool:
         raise NotImplementedError()
 
-    def alphabet(self) -> Set[str]:
-        raise NotImplementedError()
-
-    def derive(self, char: str) -> 'Regex':
-        raise NotImplementedError()
-
     def derivatives(self) -> Derivatives:
         raise NotImplementedError()
 
-    def tags(self) -> List[str]:
-        return []
-
-    def choices(self) -> Set['Regex']:
+    def choices(self) -> List['Regex']:
         raise NotImplementedError()
 
     def __mul__(self, other: object) -> 'Regex':
@@ -41,7 +58,7 @@ class Regex:
         if isinstance(other, Empty):
             return self
         if isinstance(other, Regex):
-            choices = sorted(self.choices() | other.choices())
+            choices = merge_args(self.choices(), other.choices())
             regex = choices[0]
             for choice in choices[1:]:
                 regex = Choice(regex, choice)
@@ -111,17 +128,11 @@ class Empty(Regex):
     def nullable(self) -> bool:
         return False
 
-    def alphabet(self) -> Set[str]:
-        return set()
-
-    def derive(self, char: str) -> Regex:
-        return self
-
     def derivatives(self) -> Derivatives:
         return [(CHARSET_END, Empty())]
 
-    def choices(self) -> Set[Regex]:
-        return set()
+    def choices(self) -> List[Regex]:
+        return []
 
     def __mul__(self, other: object) -> Regex:
         return self
@@ -149,17 +160,11 @@ class Epsilon(Regex):
     def nullable(self) -> bool:
         return True
 
-    def alphabet(self) -> Set[str]:
-        return set()
-
-    def derive(self, char: str) -> Regex:
-        return Empty()
-
     def derivatives(self) -> Derivatives:
         return [(CHARSET_END, Empty())]
 
-    def choices(self) -> Set[Regex]:
-        return set([self])
+    def choices(self) -> List[Regex]:
+        return [self]
 
     def __mul__(self, other: object) -> Regex:
         if isinstance(other, Regex):
@@ -200,21 +205,6 @@ class CharRanges(Regex):
     def nullable(self) -> bool:
         return False
 
-    def alphabet(self) -> Set[str]:
-        result: Set[str] = set()
-        for start, end in self._ranges:
-            result.update(chr(c) for c in range(start, end))
-        return result
-
-    def derive(self, char: str) -> Regex:
-        code = ord(char)
-        for start, end in self._ranges:
-            if start <= code < end:
-                return Epsilon()
-            if start > code:
-                break
-        return Empty()
-
     def derivatives(self) -> Derivatives:
         result: Derivatives = []
         last = 0
@@ -227,8 +217,8 @@ class CharRanges(Regex):
             result.append((CHARSET_END, Empty()))
         return result
 
-    def choices(self) -> Set[Regex]:
-        return set([self])
+    def choices(self) -> List[Regex]:
+        return [self]
 
     def _key(self) -> Tuple[Any, ...]:
         return (tuple(self._ranges,))
@@ -291,23 +281,14 @@ class Sequence(Regex):
     def nullable(self) -> bool:
         return self._first.nullable() and self._second.nullable()
 
-    def alphabet(self) -> Set[str]:
-        return self._first.alphabet() | self._second.alphabet()
-
-    def derive(self, char: str) -> Regex:
-        if self._first.nullable():
-            return (self._first.derive(char) * self._second |
-                    self._second.derive(char))
-        return self._first.derive(char) * self._second
-
     def derivatives(self) -> Derivatives:
         result = append_items(self._first.derivatives(), self._second)
         if self._first.nullable():
             result = merge_choice(result, self._second.derivatives())
         return result
 
-    def choices(self) -> Set[Regex]:
-        return set([self])
+    def choices(self) -> List[Regex]:
+        return [self]
 
     def __mul__(self, other: object) -> Regex:
         return self._first * (self._second * other)
@@ -333,18 +314,12 @@ class Choice(Regex):
     def nullable(self) -> bool:
         return self._first.nullable() or self._second.nullable()
 
-    def alphabet(self) -> Set[str]:
-        return self._first.alphabet() | self._second.alphabet()
-
-    def derive(self, char: str) -> Regex:
-        return self._first.derive(char) | self._second.derive(char)
-
     def derivatives(self) -> Derivatives:
         return merge_choice(self._first.derivatives(),
                             self._second.derivatives())
 
-    def choices(self) -> Set[Regex]:
-        return self._first.choices() | self._second.choices()
+    def choices(self) -> List[Regex]:
+        return self._first.choices() + self._second.choices()
 
     def _key(self) -> Tuple[Any, ...]:
         return (self._first, self._second)
@@ -363,17 +338,11 @@ class Repeat(Regex):
     def nullable(self) -> bool:
         return True
 
-    def alphabet(self) -> Set[str]:
-        return self._regex.alphabet()
-
-    def derive(self, char: str) -> Regex:
-        return self._regex.derive(char) * self
-
     def derivatives(self) -> Derivatives:
         return append_items(self._regex.derivatives(), self)
 
-    def choices(self) -> Set[Regex]:
-        return set([self])
+    def choices(self) -> List[Regex]:
+        return [self]
 
     def _key(self) -> Tuple[Any, ...]:
         return (self._regex,)
@@ -392,17 +361,11 @@ class Invert(Regex):
     def nullable(self) -> bool:
         return not self._regex.nullable()
 
-    def alphabet(self) -> Set[str]:
-        return set(chr(i) for i in range(CHARSET_END))
-
-    def derive(self, char: str) -> Regex:
-        return ~self._regex.derive(char)
-
     def derivatives(self) -> Derivatives:
         return [(end, ~item) for end, item in self._regex.derivatives()]
 
-    def choices(self) -> Set[Regex]:
-        return set([self])
+    def choices(self) -> List[Regex]:
+        return [self]
 
     def _key(self) -> Tuple[Any, ...]:
         return (self._regex,)
@@ -432,18 +395,12 @@ class Intersect(Regex):
     def nullable(self) -> bool:
         return self._first.nullable() and self._second.nullable()
 
-    def alphabet(self) -> Set[str]:
-        return self._first.alphabet() & self._second.alphabet()
-
-    def derive(self, char: str) -> Regex:
-        return self._first.derive(char) & self._second.derive(char)
-
     def derivatives(self) -> Derivatives:
         return merge_intersect(self._first.derivatives(),
                                self._second.derivatives())
 
-    def choices(self) -> Set[Regex]:
-        return set([self])
+    def choices(self) -> List[Regex]:
+        return [self]
 
     def _key(self) -> Tuple[Any, ...]:
         return (self._first, self._second)
@@ -473,18 +430,12 @@ class Subtract(Regex):
     def nullable(self) -> bool:
         return self._first.nullable() and not self._second.nullable()
 
-    def alphabet(self) -> Set[str]:
-        return self._first.alphabet() | self._second.alphabet()
-
-    def derive(self, char: str) -> Regex:
-        return self._first.derive(char) - self._second.derive(char)
-
     def derivatives(self) -> Derivatives:
         return merge_subtract(self._first.derivatives(),
                               self._second.derivatives())
 
-    def choices(self) -> Set[Regex]:
-        return set([self])
+    def choices(self) -> List[Regex]:
+        return [self]
 
     def _key(self) -> Tuple[Any, ...]:
         return (self._first, self._second)
