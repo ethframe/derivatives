@@ -54,7 +54,8 @@ class Vector:
         return hash((Vector, tuple(self._items)))
 
 
-DfaTransitions = List[Tuple[str, str, int]]
+DfaTransition = Tuple[str, str, int]
+DfaTransitions = List[DfaTransition]
 DfaDelta = List[DfaTransitions]
 DfaTags = List[Optional[List[str]]]
 
@@ -116,6 +117,7 @@ def make_dfa(vector: Vector) -> Dfa:
             if len(state_map) != len_before:
                 queue.append((target_state, target))
             state_delta.append((chr(last), chr(end - 1), target_state))
+            last = end
 
     return Dfa(
         [transitions for _, transitions in sorted(delta.items())],
