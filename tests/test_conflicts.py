@@ -1,15 +1,14 @@
-from derivatives.lexer import make_lexer
-from derivatives import Char, CharRange, string
+from derivatives import char, char_range, make_lexer, string
 
 
 def test_conflicts():
-    word = CharRange("a", "z").plus()
-    num = CharRange("0", "9").plus()
+    word = char_range("a", "z").plus()
+    num = char_range("0", "9").plus()
 
-    re_a = (word * Char(" ")).opt() * string("test")
-    re_b = (num * Char(" ")).opt() * string("test")
+    re_a = (word * char(" ")).opt() * string("test")
+    re_b = (num * char(" ")).opt() * string("test")
     re_c = string("test test")
-    re_d = (num * word * Char(" ")) * string("test")
+    re_d = (num * word * char(" ")) * string("test")
     tokens = [
         ("A", re_a),
         ("B", re_b),

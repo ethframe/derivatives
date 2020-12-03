@@ -1,31 +1,32 @@
 import pytest
 
 from derivatives import (
-    AnyChar, Char, CharRange, CharSet, any_without, lex_all, make_lexer, string
+    any_char, any_without, char, char_range, char_set, lex_all, make_lexer,
+    string
 )
 
 
 @pytest.fixture
 def c_tokens():
     # Adapted from http://www.quut.com/c/ANSI-C-grammar-l.html
-    O = CharRange("0", "7")
-    D = CharRange("0", "9")
-    NZ = CharRange("1", "9")
-    L = CharRange("a", "z") | CharRange("A", "Z") | Char("_")
+    O = char_range("0", "7")
+    D = char_range("0", "9")
+    NZ = char_range("1", "9")
+    L = char_range("a", "z") | char_range("A", "Z") | char("_")
     A = L | D
-    H = CharRange("a", "f") | CharRange("A", "F") | D
-    HP = Char("0") * CharSet("xX")
-    E = CharSet("Ee") * CharSet("+-").opt() * D.plus()
-    P = CharSet("Pp") * CharSet("+-").opt() * D.plus()
-    FS = CharSet("fFlL")
-    IS = CharSet("uU") * (CharSet("lL") | string("ll") |
+    H = char_range("a", "f") | char_range("A", "F") | D
+    HP = char("0") * char_set("xX")
+    E = char_set("Ee") * char_set("+-").opt() * D.plus()
+    P = char_set("Pp") * char_set("+-").opt() * D.plus()
+    FS = char_set("fFlL")
+    IS = char_set("uU") * (char_set("lL") | string("ll") |
                           string("LL")).opt() | \
-        (CharSet("lL") | string("ll") | string("LL")) * CharSet("uU").opt()
-    CP = CharSet("uUL")
+        (char_set("lL") | string("ll") | string("LL")) * char_set("uU").opt()
+    CP = char_set("uUL")
     SP = string("u8") | CP
-    ES = Char("\\") * (CharSet("'\"?\\abfnrtv") | O | O * O | O * O * O |
-                       Char("x") * H.plus())
-    WS = CharSet(" \t\v\n\f")
+    ES = char("\\") * (char_set("'\"?\\abfnrtv") | O | O * O | O * O * O |
+                       char("x") * H.plus())
+    WS = char_set(" \t\v\n\f")
 
     tokens = [
         ("comment", string("/*") * any_without(string("*/")) * string("*/")),
@@ -46,26 +47,26 @@ def c_tokens():
 
     tokens.append(("ident", L * A.star()))
     tokens.append(("hexconst", HP * H.plus() * IS.opt()))
-    tokens.append(("octconst",  Char("0") * O.star() * IS.opt()))
+    tokens.append(("octconst",  char("0") * O.star() * IS.opt()))
     tokens.append(("intconst",  NZ * D.star() * IS.opt()))
 
     tokens.append(("charconst",
-                   CP.opt() * Char("'") *
-                   (ES | (AnyChar() & (~CharSet("'\\\n")))).plus() *
-                   Char("'")))
+                   CP.opt() * char("'") *
+                   (ES | (any_char() & (~char_set("'\\\n")))).plus() *
+                   char("'")))
 
     tokens.append(("floatconst",
                    D.plus() * E * FS.opt() |
-                   D.star() * Char(".") * D.plus() * E.opt() * FS.opt() |
-                   D.plus() * Char(".") * D.star() * E.opt() * FS.opt() |
+                   D.star() * char(".") * D.plus() * E.opt() * FS.opt() |
+                   D.plus() * char(".") * D.star() * E.opt() * FS.opt() |
                    HP * H.plus() * P * FS.opt() |
-                   HP * H.star() * Char(".") * H.plus() * P * FS.opt() |
-                   HP * H.plus() * Char(".") * P * FS.opt()))
+                   HP * H.star() * char(".") * H.plus() * P * FS.opt() |
+                   HP * H.plus() * char(".") * P * FS.opt()))
 
     tokens.append(("string",
-                   (SP.opt() * Char("\"") *
-                    (ES | (AnyChar() & (~CharSet("\"\\\n")))).star() *
-                    Char("\"") * WS.star()).plus()))
+                   (SP.opt() * char("\"") *
+                    (ES | (any_char() & (~char_set("\"\\\n")))).star() *
+                    char("\"") * WS.star()).plus()))
 
     ops = [
         ("ellipsis", "..."), ("rightassign", ">>="), ("leftassign", "<<="),
@@ -88,7 +89,7 @@ def c_tokens():
         tokens.append((name, string(op)))
 
     tokens.append(("space", WS.plus()))
-    tokens.append(("bad", AnyChar()))
+    tokens.append(("bad", any_char()))
 
     return tokens
 
@@ -116,7 +117,7 @@ size_t strlen(const char *s)
 """
 
 TEST_TOKENS = [
-# size_t strlen(const char *s)
+    # size_t strlen(const char *s)
     ('ident', 'size_t'),
     ('ident', 'strlen'),
     ('lparen', '('),
@@ -125,15 +126,15 @@ TEST_TOKENS = [
     ('mulop', '*'),
     ('ident', 's'),
     ('rparen', ')'),
-# {
+    # {
     ('lbrace', '{'),
-# /** Simple strlen function **/
+    # /** Simple strlen function **/
     ('comment', '/** Simple strlen function **/'),
-# size_t i;
+    # size_t i;
     ('ident', 'size_t'),
     ('ident', 'i'),
     ('semicolon', ';'),
-# for (i = 0; s[i] != '\0'; i++) ;
+    # for (i = 0; s[i] != '\0'; i++) ;
     ('for', 'for'),
     ('lparen', '('),
     ('ident', 'i'),
@@ -151,11 +152,11 @@ TEST_TOKENS = [
     ('incop', '++'),
     ('rparen', ')'),
     ('semicolon', ';'),
-# return i;
+    # return i;
     ('return', 'return'),
     ('ident', 'i'),
     ('semicolon', ';'),
-# }
+    # }
     ('rbrace', '}'),
 ]
 

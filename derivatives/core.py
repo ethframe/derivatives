@@ -1,4 +1,4 @@
-from typing import Any, List, Set, Tuple
+from typing import Any, List, Tuple
 
 from .partition import CHARSET_END, Partition, make_merge_fn, make_update_fn
 
@@ -222,33 +222,6 @@ class CharRanges(Regex):
 
     def _key(self) -> Tuple[Any, ...]:
         return (tuple(self._ranges,))
-
-
-def AnyChar() -> Regex:
-    return CharRanges([(0, CHARSET_END)])
-
-
-def Char(char: str) -> Regex:
-    code = ord(char)
-    return CharRanges([(code, code + 1)])
-
-
-def CharSet(chars: str) -> Regex:
-    ranges = []
-    last_end = None
-    for char in sorted(chars):
-        code = ord(char)
-        if last_end and last_end == code:
-            last_end = code + 1
-            ranges[-1] = (ranges[-1][0], last_end)
-        else:
-            last_end = code + 1
-            ranges.append((code, last_end))
-    return CharRanges(ranges)
-
-
-def CharRange(start: str, end: str) -> Regex:
-    return CharRanges([(ord(start), ord(end) + 1)])
 
 
 def append_item(left: Regex, right: Regex) -> Regex:
