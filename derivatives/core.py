@@ -1,4 +1,4 @@
-from typing import Any, List, Tuple
+from typing import Any, List, Set, Tuple
 
 from .partition import CHARSET_END, Partition, make_merge_fn, make_update_fn
 
@@ -40,6 +40,9 @@ class Regex:
         raise NotImplementedError()
 
     def derivatives(self) -> Derivatives:
+        raise NotImplementedError()
+
+    def tags(self) -> Set[int]:
         raise NotImplementedError()
 
     def join(self, other: "Regex") -> "Regex":
@@ -135,6 +138,9 @@ class Empty(Regex):
     def derivatives(self) -> Derivatives:
         return [(CHARSET_END, Empty())]
 
+    def tags(self) -> Set[int]:
+        return set()
+
     def join(self, other: Regex) -> Regex:
         return self
 
@@ -180,6 +186,9 @@ class Epsilon(Regex):
     def derivatives(self) -> Derivatives:
         return [(CHARSET_END, Empty())]
 
+    def tags(self) -> Set[int]:
+        return set()
+
     def join(self, other: Regex) -> Regex:
         return other
 
@@ -194,6 +203,20 @@ class Epsilon(Regex):
 
     def _key(self) -> Tuple[Any, ...]:
         return ()
+
+
+class Tag(Epsilon):
+    def __init__(self, tag: int):
+        self._tag = tag
+
+    def __str__(self) -> str:
+        return "{{{}}}".format(self._tag)
+
+    def tags(self) -> Set[int]:
+        return {self._tag}
+
+    def _key(self) -> Tuple[Any, ...]:
+        return (self._tag,)
 
 
 class CharRanges(Regex):
@@ -238,12 +261,15 @@ class CharRanges(Regex):
             result.append((CHARSET_END, Empty()))
         return result
 
+    def tags(self) -> Set[int]:
+        return set()
+
     def _key(self) -> Tuple[Any, ...]:
         return (tuple(self._ranges,))
 
 
 def append_item(left: Regex, right: Regex) -> Regex:
-    return left * right
+    return left.join(right)
 
 
 append_items = make_update_fn(append_item)
@@ -278,6 +304,12 @@ class Sequence(Regex):
             result = merge_union(result, self._second.derivatives())
         return result
 
+    def tags(self) -> Set[int]:
+        tags = self._first.tags()
+        if self._first.nullable():
+            tags |= self._second.tags()
+        return tags
+
     def join(self, other: Regex) -> Regex:
         return Sequence(self._first, self._second.join(other))
 
@@ -306,6 +338,13 @@ class Union(Regex):
         for item in items:
             result = merge_union(result, item.derivatives())
         return result
+
+    def tags(self) -> Set[int]:
+        items = iter(self._items)
+        tags = next(items).tags()
+        for item in items:
+            tags |= item.tags()
+        return tags
 
     def _union_one(self, other: Regex) -> Regex:
         return Union(merge_args(self._items, [other]))
@@ -349,6 +388,13 @@ class Intersect(Regex):
             result = merge_intersect(result, item.derivatives())
         return result
 
+    def tags(self) -> Set[int]:
+        items = iter(self._items)
+        tags = next(items).tags()
+        for item in items:
+            tags &= item.tags()
+        return tags
+
     def _intersect_one(self, other: Regex) -> Regex:
         return Intersect(merge_args(self._items, [other]))
 
@@ -378,6 +424,9 @@ class Repeat(Regex):
     def derivatives(self) -> Derivatives:
         return append_items(self._regex.derivatives(), self)
 
+    def tags(self) -> Set[int]:
+        return self._regex.tags()
+
     def star(self) -> Regex:
         return self
 
@@ -406,6 +455,9 @@ class Invert(Regex):
 
     def derivatives(self) -> Derivatives:
         return [(end, ~item) for end, item in self._regex.derivatives()]
+
+    def tags(self) -> Set[int]:
+        return set()
 
     def __invert__(self) -> Regex:
         return self._regex

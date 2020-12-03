@@ -1,64 +1,15 @@
 import html
 from collections import defaultdict, deque
 from itertools import count
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Callable, Dict, Iterator, List, Optional, Set, Tuple
 
-from .core import Empty, Regex
-from .partition import CHARSET_END, Partition, make_merge_fn
-
-
-def merge_partial_item(acc: List[Regex], val: Regex) -> List[Regex]:
-    acc_copy = acc.copy()
-    acc_copy.append(val)
-    return acc_copy
-
-
-def merge_partial_item_inplace(acc: List[Regex], val: Regex) -> List[Regex]:
-    acc.append(val)
-    return acc
-
-
-merge_partial = make_merge_fn(merge_partial_item, merge_partial_item_inplace)
-
-
-Transitions = Partition["Vector"]
-
-
-class Vector:
-    def __init__(self, items: List[Tuple[str, Regex]]):
-        self._items = items
-
-    def transitions(self) -> Transitions:
-        tags: List[str] = []
-        partial: Partition[List[Regex]] = [(CHARSET_END, [])]
-        for tag, regex in self._items:
-            tags.append(tag)
-            partial = merge_partial(partial, regex.derivatives())
-        return [
-            (end, Vector([(tag, regex) for tag, regex in zip(tags, regexes)
-                          if not isinstance(regex, Empty)]))
-            for end, regexes in partial
-        ]
-
-    def empty(self) -> bool:
-        return all(isinstance(regex, Empty) for _, regex in self._items)
-
-    def tags(self) -> List[str]:
-        return [tag for tag, regex in self._items if regex.nullable()]
-
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, Vector):
-            return NotImplemented
-        return self._items == other._items
-
-    def __hash__(self) -> int:
-        return hash((Vector, tuple(self._items)))
+from .core import Regex
 
 
 DfaTransition = Tuple[str, str, int]
 DfaTransitions = List[DfaTransition]
 DfaDelta = List[DfaTransitions]
-DfaTags = List[Optional[List[str]]]
+DfaTags = List[Optional[str]]
 
 
 class DfaRunner:
@@ -76,7 +27,7 @@ class DfaRunner:
                 break
         return False
 
-    def tags(self) -> Optional[List[str]]:
+    def tag(self) -> Optional[str]:
         return self._tags[self._state]
 
 
@@ -88,9 +39,28 @@ class Dfa:
     def start(self) -> DfaRunner:
         return DfaRunner(self._delta, self._tags)
 
-    def conflicts(self) -> Set[Tuple[str, ...]]:
-        return set(tuple(sorted(tags))
-                   for tags in self._tags if tags and len(tags) > 1)
+    def scan_once(self, input: str) -> Optional[Tuple[str, int]]:
+        result: Optional[Tuple[str, int]] = None
+        runner = self.start()
+        tag = runner.tag()
+        if tag:
+            result = (tag, 0)
+        for pos, char in enumerate(input, 1):
+            if not runner.handle(char):
+                break
+            tag = runner.tag()
+            if tag:
+                result = (tag, pos)
+        return result
+
+    def scan_all(self, input: str) -> Iterator[Tuple[str, str]]:
+        while input:
+            result = self.scan_once(input)
+            if result is None:
+                raise ValueError("Input not recognized")
+            tag, pos = result
+            yield tag, input[:pos]
+            input = input[pos:]
 
     def to_dot(self) -> str:
         def fmt_char(char: str) -> str:
@@ -106,11 +76,11 @@ class Dfa:
         ]
 
         seen_tags: Set[str] = set()
-        for state, tags in enumerate(self._tags):
+        for state, tag in enumerate(self._tags):
             shape = "circle"
-            if tags is not None:
+            if tag is not None:
                 shape = "doublecircle"
-                seen_tags.update(tags)
+                seen_tags.add(tag)
             buf.append(
                 '  "{}" [shape={} fixedsize=shape]'.format(state, shape)
             )
@@ -141,45 +111,64 @@ class Dfa:
                         classes.append(fmt_char(start) + "-" + fmt_char(end))
                 label = "[{}]".format("".join(classes))
                 buf.append(
-                    '  "{}" -> "{}" [label=<{}>]'.format(state, target, label))
-            tags = self._tags[state]
-            if tags is not None:
-                for tag in tags:
-                    buf.append(
-                        '  "{}" -> "t_{}" [style=dashed]'.format(state, tag)
-                    )
+                    '  "{}" -> "{}" [label=<{}>]'.format(state, target, label)
+                )
+            tag = self._tags[state]
+            if tag is not None:
+                buf.append(
+                    '  "{}" -> "t_{}" [style=dashed]'.format(state, tag)
+                )
 
         buf.extend(["}", ""])
         return "\n".join(buf)
 
 
-def make_dfa(vector: Vector) -> Dfa:
+def make_dfa(regex: Regex, tag_resolver: Callable[[Set[int]], str]) -> Dfa:
     delta: Dict[int, DfaTransitions] = {}
-    tags: Dict[int, List[str]] = {}
+    tags: Dict[int, str] = {}
 
-    state_map: Dict[Vector, int] = defaultdict(count().__next__)
-    queue = deque([(state_map[vector], vector)])
+    incoming: Dict[int, Set[int]] = defaultdict(set)
+
+    state_map: Dict[Regex, int] = defaultdict(count().__next__)
+    queue = deque([(state_map[regex], regex)])
 
     while queue:
-        state, vector = queue.popleft()
+        state, regex = queue.popleft()
         state_delta = delta[state] = []
-        state_tags = vector.tags()
+        state_tags = regex.tags()
         if state_tags:
-            tags[state] = state_tags
+            tags[state] = tag_resolver(state_tags)
 
         last = 0
-        for end, target in vector.transitions():
-            if target.empty():
-                last = end
-                continue
+        for end, target in regex.derivatives():
             len_before = len(state_map)
             target_state = state_map[target]
+            incoming[target_state].add(state)
             if len(state_map) != len_before:
                 queue.append((target_state, target))
             state_delta.append((chr(last), chr(end - 1), target_state))
             last = end
 
+    live = set(tags)
+    live_queue = deque(tags)
+    while live_queue:
+        state = live_queue.popleft()
+        for source_state in incoming[state]:
+            if source_state not in live:
+                live.add(source_state)
+                live_queue.append(source_state)
+
+    new_to_old = sorted(live)
+    old_to_new = dict((state, i) for i, state in enumerate(new_to_old))
+
     return Dfa(
-        [transitions for _, transitions in sorted(delta.items())],
-        [tags.get(i) for i, _ in sorted(delta.items())]
+        [
+            [
+                (start, end, old_to_new[target])
+                for start, end, target in delta[old_state]
+                if target in old_to_new
+            ]
+            for old_state in new_to_old
+        ],
+        [tags.get(old_state) for old_state in new_to_old],
     )

@@ -1,4 +1,7 @@
+from typing import Dict, Set
+
 from derivatives import char, char_range, make_lexer, string
+from derivatives.lexer import select_first
 
 
 def test_conflicts():
@@ -16,4 +19,12 @@ def test_conflicts():
         ("D", re_d),
     ]
 
-    assert make_lexer(tokens).conflicts() == {('A', 'B'), ('A', 'C')}
+    conflicts = set()
+
+    def collect_conflicts(tags: Set[int], names: Dict[int, str]) -> str:
+        if len(tags) > 1:
+            conflicts.add(tuple(sorted(names[tag] for tag in tags)))
+        return select_first(tags, names)
+
+    make_lexer(tokens, collect_conflicts)
+    assert conflicts == {('A', 'B'), ('A', 'C')}

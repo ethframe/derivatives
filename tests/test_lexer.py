@@ -1,9 +1,9 @@
 import pytest
 
 from derivatives import (
-    any_char, any_without, char, char_range, char_set, lex_all, make_lexer,
-    string
+    any_char, any_without, char, char_range, char_set, make_lexer, string
 )
+from derivatives.lexer import select_first
 
 
 @pytest.fixture
@@ -20,7 +20,7 @@ def c_tokens():
     P = char_set("Pp") * char_set("+-").opt() * D.plus()
     FS = char_set("fFlL")
     IS = char_set("uU") * (char_set("lL") | string("ll") |
-                          string("LL")).opt() | \
+                           string("LL")).opt() | \
         (char_set("lL") | string("ll") | string("LL")) * char_set("uU").opt()
     CP = char_set("uUL")
     SP = string("u8") | CP
@@ -96,12 +96,11 @@ def c_tokens():
 
 @pytest.fixture
 def c_lexer(c_tokens):
-    return make_lexer(c_tokens)
+    return make_lexer(c_tokens, select_first)
 
 
 def c_lex(c_lexer, string):
-    for tags, value in lex_all(c_lexer, string):
-        tag = tags[0]
+    for tag, value in c_lexer.scan_all(string):
         if tag != "space":
             yield tag, value
 
