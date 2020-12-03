@@ -1,29 +1,36 @@
-from typing import Iterator, List, Tuple
+from typing import Callable, Dict, List, Set, Tuple
 
-from .core import Regex
-from .dfa import Dfa, Vector, make_dfa
+from .core import Empty, Regex, Tag
+from .dfa import Dfa, make_dfa
 
-
-def make_lexer(tokens: List[Tuple[str, Regex]]) -> Dfa:
-    return make_dfa(Vector(tokens))
+TagResolver = Callable[[Set[int], Dict[int, str]], str]
 
 
-def lex_once(dfa: Dfa, string: str) -> Tuple[int, List[str]]:
-    runner = dfa.start()
-    tag = runner.tags() or []
-    pos = 0
-    for i, char in enumerate(string):
-        if not runner.handle(char):
-            break
-        tags = runner.tags()
-        if tags:
-            tag = tags
-            pos = i + 1
-    return pos, tag
+def select_first(tags: Set[int], names: Dict[int, str]) -> str:
+    return names[min(tags)]
 
 
-def lex_all(dfa: Dfa, string: str) -> Iterator[Tuple[List[str], str]]:
-    while string:
-        pos, tag = lex_once(dfa, string)
-        yield tag, string[:pos]
-        string = string[pos:]
+def raise_on_conflict(tags: Set[int], names: Dict[int, str]) -> str:
+    if len(tags) == 1:
+        return names[next(iter(tags))]
+    raise ValueError(
+        "Conflicting patterns: {}".format(
+            ", ".join(names[tag] for tag in sorted(tags))
+        )
+    )
+
+
+def make_lexer(
+        tokens: List[Tuple[str, Regex]],
+        tag_resolver: TagResolver = raise_on_conflict) -> Dfa:
+
+    names = {i: name for i, (name, _) in enumerate(tokens)}
+
+    def dfa_tag_resolver(tags: Set[int]) -> str:
+        return tag_resolver(tags, names)
+
+    merged: Regex = Empty()
+    for i, (_, regex) in enumerate(tokens):
+        merged = merged.union(regex.join(Tag(i)))
+
+    return make_dfa(merged, dfa_tag_resolver)

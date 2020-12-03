@@ -2,10 +2,10 @@ from typing import Any, List, Set, Tuple
 
 from .partition import CHARSET_END, Partition, make_merge_fn, make_update_fn
 
-Derivatives = Partition['Regex']
+Derivatives = Partition["Regex"]
 
 
-def merge_args(left: List['Regex'], right: List['Regex']) -> List['Regex']:
+def merge_args(left: List["Regex"], right: List["Regex"]) -> List["Regex"]:
     result: List[Regex] = []
     lit = iter(left)
     rit = iter(right)
@@ -42,62 +42,69 @@ class Regex:
     def derivatives(self) -> Derivatives:
         raise NotImplementedError()
 
-    def choices(self) -> List['Regex']:
+    def tags(self) -> Set[int]:
         raise NotImplementedError()
 
-    def __mul__(self, other: object) -> 'Regex':
-        if isinstance(other, Empty):
-            return other
-        if isinstance(other, Epsilon):
+    def join(self, other: "Regex") -> "Regex":
+        return Sequence(self, other)
+
+    def __mul__(self, other: object) -> "Regex":
+        if isinstance(other, Regex):
+            return self.join(other)
+        return NotImplemented
+
+    def _union_one(self, other: "Regex") -> "Regex":
+        if self == other:
             return self
+        if self < other:
+            return Union([self, other])
+        return Union([other, self])
+
+    def _union_many(self, other: List["Regex"]) -> "Regex":
+        return Union(merge_args([self], other))
+
+    def union(self, other: "Regex") -> "Regex":
+        return other._union_one(self)
+
+    def __or__(self, other: object) -> "Regex":
         if isinstance(other, Regex):
-            return Sequence(self, other)
+            return self.union(other)
         return NotImplemented
 
-    def __or__(self, other: object) -> 'Regex':
-        if isinstance(other, Empty):
+    def _intersect_one(self, other: "Regex") -> "Regex":
+        if self == other:
             return self
+        if self < other:
+            return Intersect([self, other])
+        return Intersect([other, self])
+
+    def _intersect_many(self, other: List["Regex"]) -> "Regex":
+        return Intersect(merge_args([self], other))
+
+    def intersect(self, other: "Regex") -> "Regex":
+        return other._intersect_one(self)
+
+    def __and__(self, other: object) -> "Regex":
         if isinstance(other, Regex):
-            choices = merge_args(self.choices(), other.choices())
-            regex = choices[0]
-            for choice in choices[1:]:
-                regex = Choice(regex, choice)
-            return regex
+            return self.intersect(other)
         return NotImplemented
 
-    def __and__(self, other: object) -> 'Regex':
-        if isinstance(other, Empty):
-            return other
+    def __sub__(self, other: object) -> "Regex":
         if isinstance(other, Regex):
-            if self == other:
-                return self
-            return Intersect(self, other)
+            return self & ~other
         return NotImplemented
 
-    def __sub__(self, other: object) -> 'Regex':
-        if isinstance(other, Empty):
-            return self
-        if isinstance(other, Regex):
-            if self == other:
-                return Empty()
-            return Subtract(self, other)
-        return NotImplemented
-
-    def __invert__(self) -> 'Regex':
-        if isinstance(self, Invert):
-            return self._regex
+    def __invert__(self) -> "Regex":
         return Invert(self)
 
-    def star(self) -> 'Regex':
-        if isinstance(self, (Empty, Epsilon, Repeat)):
-            return self
+    def star(self) -> "Regex":
         return Repeat(self)
 
-    def plus(self) -> 'Regex':
-        return self * self.star()
+    def plus(self) -> "Regex":
+        return self.join(self.star())
 
-    def opt(self) -> 'Regex':
-        return self | Epsilon()
+    def opt(self) -> "Regex":
+        return self._union_one(Epsilon())
 
     def _key(self) -> Tuple[Any, ...]:
         raise NotImplementedError()
@@ -131,22 +138,38 @@ class Empty(Regex):
     def derivatives(self) -> Derivatives:
         return [(CHARSET_END, Empty())]
 
-    def choices(self) -> List[Regex]:
-        return []
+    def tags(self) -> Set[int]:
+        return set()
 
-    def __mul__(self, other: object) -> Regex:
+    def join(self, other: Regex) -> Regex:
         return self
 
-    def __or__(self, other: object) -> Regex:
-        if isinstance(other, Regex):
-            return other
-        return NotImplemented
+    def _union_one(self, other: Regex) -> Regex:
+        return other
 
-    def __and__(self, other: object) -> Regex:
+    def _union_many(self, other: List[Regex]) -> Regex:
+        return Union(other)
+
+    def union(self, other: Regex) -> Regex:
+        return other
+
+    def _intersect_one(self, other: Regex) -> Regex:
         return self
 
-    def __sub__(self, other: object) -> Regex:
+    def _intersect_many(self, other: List[Regex]) -> Regex:
         return self
+
+    def intersect(self, other: Regex) -> Regex:
+        return self
+
+    def star(self) -> Regex:
+        return Epsilon()
+
+    def plus(self) -> Regex:
+        return self
+
+    def opt(self) -> Regex:
+        return Epsilon()
 
     def _key(self) -> Tuple[Any, ...]:
         return ()
@@ -163,16 +186,37 @@ class Epsilon(Regex):
     def derivatives(self) -> Derivatives:
         return [(CHARSET_END, Empty())]
 
-    def choices(self) -> List[Regex]:
-        return [self]
+    def tags(self) -> Set[int]:
+        return set()
 
-    def __mul__(self, other: object) -> Regex:
-        if isinstance(other, Regex):
-            return other
-        return NotImplemented
+    def join(self, other: Regex) -> Regex:
+        return other
+
+    def star(self) -> Regex:
+        return self
+
+    def plus(self) -> Regex:
+        return self
+
+    def opt(self) -> Regex:
+        return self
 
     def _key(self) -> Tuple[Any, ...]:
         return ()
+
+
+class Tag(Epsilon):
+    def __init__(self, tag: int):
+        self._tag = tag
+
+    def __str__(self) -> str:
+        return "{{{}}}".format(self._tag)
+
+    def tags(self) -> Set[int]:
+        return {self._tag}
+
+    def _key(self) -> Tuple[Any, ...]:
+        return (self._tag,)
 
 
 class CharRanges(Regex):
@@ -199,8 +243,8 @@ class CharRanges(Regex):
             elif num == 2:
                 parts.append(from_code(start) + from_code(start + 1))
             else:
-                parts.append(from_code(start) + '-' + from_code(end - 1))
-        return '[' + ''.join(parts) + ']'
+                parts.append(from_code(start) + "-" + from_code(end - 1))
+        return "[" + "".join(parts) + "]"
 
     def nullable(self) -> bool:
         return False
@@ -217,52 +261,25 @@ class CharRanges(Regex):
             result.append((CHARSET_END, Empty()))
         return result
 
-    def choices(self) -> List[Regex]:
-        return [self]
+    def tags(self) -> Set[int]:
+        return set()
 
     def _key(self) -> Tuple[Any, ...]:
         return (tuple(self._ranges,))
 
 
-def AnyChar() -> Regex:
-    return CharRanges([(0, CHARSET_END)])
-
-
-def Char(char: str) -> Regex:
-    code = ord(char)
-    return CharRanges([(code, code + 1)])
-
-
-def CharSet(chars: str) -> Regex:
-    ranges = []
-    last_end = None
-    for char in sorted(chars):
-        code = ord(char)
-        if last_end and last_end == code:
-            last_end = code + 1
-            ranges[-1] = (ranges[-1][0], last_end)
-        else:
-            last_end = code + 1
-            ranges.append((code, last_end))
-    return CharRanges(ranges)
-
-
-def CharRange(start: str, end: str) -> Regex:
-    return CharRanges([(ord(start), ord(end) + 1)])
-
-
 def append_item(left: Regex, right: Regex) -> Regex:
-    return left * right
+    return left.join(right)
 
 
 append_items = make_update_fn(append_item)
 
 
-def merge_choice_item(left: Regex, right: Regex) -> Regex:
-    return left | right
+def merge_union_item(left: Regex, right: Regex) -> Regex:
+    return left.union(right)
 
 
-merge_choice = make_merge_fn(merge_choice_item, merge_choice_item)
+merge_union = make_merge_fn(merge_union_item, merge_union_item)
 
 
 class Sequence(Regex):
@@ -273,7 +290,7 @@ class Sequence(Regex):
 
     def __str__(self) -> str:
         def maybe_paren(regex: Regex) -> str:
-            if isinstance(regex, (Choice, Intersect, Subtract)):
+            if isinstance(regex, (Union, Intersect)):
                 return "({})".format(regex)
             return str(regex)
         return maybe_paren(self._first) + maybe_paren(self._second)
@@ -284,45 +301,111 @@ class Sequence(Regex):
     def derivatives(self) -> Derivatives:
         result = append_items(self._first.derivatives(), self._second)
         if self._first.nullable():
-            result = merge_choice(result, self._second.derivatives())
+            result = merge_union(result, self._second.derivatives())
         return result
 
-    def choices(self) -> List[Regex]:
-        return [self]
+    def tags(self) -> Set[int]:
+        tags = self._first.tags()
+        if self._first.nullable():
+            tags |= self._second.tags()
+        return tags
 
-    def __mul__(self, other: object) -> Regex:
-        return self._first * (self._second * other)
+    def join(self, other: Regex) -> Regex:
+        return Sequence(self._first, self._second.join(other))
 
     def _key(self) -> Tuple[Any, ...]:
         return (self._first, self._second)
 
 
-class Choice(Regex):
+class Union(Regex):
 
-    def __init__(self, first: Regex, second: Regex):
-        self._first = first
-        self._second = second
+    def __init__(self, items: List[Regex]):
+        self._items = items
 
     def __str__(self) -> str:
         def maybe_paren(regex: Regex) -> str:
-            if isinstance(regex, (Intersect, Subtract)):
+            if isinstance(regex, Intersect):
                 return "({})".format(regex)
             return str(regex)
-        return "{}|{}".format(maybe_paren(self._first),
-                              maybe_paren(self._second))
+        return "|".join(maybe_paren(item) for item in self._items)
 
     def nullable(self) -> bool:
-        return self._first.nullable() or self._second.nullable()
+        return any(item.nullable() for item in self._items)
 
     def derivatives(self) -> Derivatives:
-        return merge_choice(self._first.derivatives(),
-                            self._second.derivatives())
+        items = iter(self._items)
+        result = next(items).derivatives()
+        for item in items:
+            result = merge_union(result, item.derivatives())
+        return result
 
-    def choices(self) -> List[Regex]:
-        return self._first.choices() + self._second.choices()
+    def tags(self) -> Set[int]:
+        items = iter(self._items)
+        tags = next(items).tags()
+        for item in items:
+            tags |= item.tags()
+        return tags
+
+    def _union_one(self, other: Regex) -> Regex:
+        return Union(merge_args(self._items, [other]))
+
+    def _union_many(self, other: List[Regex]) -> Regex:
+        return Union(merge_args(self._items, other))
+
+    def union(self, other: Regex) -> Regex:
+        return other._union_many(self._items)
 
     def _key(self) -> Tuple[Any, ...]:
-        return (self._first, self._second)
+        return (tuple(self._items),)
+
+
+def merge_intersect_item(left: Regex, right: Regex) -> Regex:
+    return left.intersect(right)
+
+
+merge_intersect = make_merge_fn(merge_intersect_item, merge_intersect_item)
+
+
+class Intersect(Regex):
+
+    def __init__(self, items: List[Regex]):
+        self._items = items
+
+    def __str__(self) -> str:
+        def maybe_paren(regex: Regex) -> str:
+            if isinstance(regex, Union):
+                return "({})".format(regex)
+            return str(regex)
+        return "&".join(maybe_paren(item) for item in self._items)
+
+    def nullable(self) -> bool:
+        return all(item.nullable() for item in self._items)
+
+    def derivatives(self) -> Derivatives:
+        items = iter(self._items)
+        result = next(items).derivatives()
+        for item in items:
+            result = merge_intersect(result, item.derivatives())
+        return result
+
+    def tags(self) -> Set[int]:
+        items = iter(self._items)
+        tags = next(items).tags()
+        for item in items:
+            tags &= item.tags()
+        return tags
+
+    def _intersect_one(self, other: Regex) -> Regex:
+        return Intersect(merge_args(self._items, [other]))
+
+    def _intersect_many(self, other: List[Regex]) -> Regex:
+        return Intersect(merge_args(self._items, other))
+
+    def intersect(self, other: Regex) -> Regex:
+        return other._intersect_many(self._items)
+
+    def _key(self) -> Tuple[Any, ...]:
+        return (tuple(self._items),)
 
 
 class Repeat(Regex):
@@ -341,8 +424,17 @@ class Repeat(Regex):
     def derivatives(self) -> Derivatives:
         return append_items(self._regex.derivatives(), self)
 
-    def choices(self) -> List[Regex]:
-        return [self]
+    def tags(self) -> Set[int]:
+        return self._regex.tags()
+
+    def star(self) -> Regex:
+        return self
+
+    def plus(self) -> Regex:
+        return self
+
+    def opt(self) -> Regex:
+        return self
 
     def _key(self) -> Tuple[Any, ...]:
         return (self._regex,)
@@ -364,78 +456,11 @@ class Invert(Regex):
     def derivatives(self) -> Derivatives:
         return [(end, ~item) for end, item in self._regex.derivatives()]
 
-    def choices(self) -> List[Regex]:
-        return [self]
+    def tags(self) -> Set[int]:
+        return set()
+
+    def __invert__(self) -> Regex:
+        return self._regex
 
     def _key(self) -> Tuple[Any, ...]:
         return (self._regex,)
-
-
-def merge_intersect_item(left: Regex, right: Regex) -> Regex:
-    return left & right
-
-
-merge_intersect = make_merge_fn(merge_intersect_item, merge_intersect_item)
-
-
-class Intersect(Regex):
-
-    def __init__(self, first: Regex, second: Regex):
-        self._first = first
-        self._second = second
-
-    def __str__(self) -> str:
-        def maybe_paren(regex: Regex) -> str:
-            if isinstance(regex, (Choice, Subtract)):
-                return "({})".format(regex)
-            return str(regex)
-        return "{}&{}".format(maybe_paren(self._first),
-                              maybe_paren(self._second))
-
-    def nullable(self) -> bool:
-        return self._first.nullable() and self._second.nullable()
-
-    def derivatives(self) -> Derivatives:
-        return merge_intersect(self._first.derivatives(),
-                               self._second.derivatives())
-
-    def choices(self) -> List[Regex]:
-        return [self]
-
-    def _key(self) -> Tuple[Any, ...]:
-        return (self._first, self._second)
-
-
-def merge_subtract_item(left: Regex, right: Regex) -> Regex:
-    return left - right
-
-
-merge_subtract = make_merge_fn(merge_subtract_item, merge_subtract_item)
-
-
-class Subtract(Regex):
-
-    def __init__(self, first: Regex, second: Regex):
-        self._first = first
-        self._second = second
-
-    def __str__(self) -> str:
-        def maybe_paren(regex: Regex) -> str:
-            if isinstance(regex, (Choice, Intersect, Subtract)):
-                return "({})".format(regex)
-            return str(regex)
-        return "{}-{}".format(maybe_paren(self._first),
-                              maybe_paren(self._second))
-
-    def nullable(self) -> bool:
-        return self._first.nullable() and not self._second.nullable()
-
-    def derivatives(self) -> Derivatives:
-        return merge_subtract(self._first.derivatives(),
-                              self._second.derivatives())
-
-    def choices(self) -> List[Regex]:
-        return [self]
-
-    def _key(self) -> Tuple[Any, ...]:
-        return (self._first, self._second)

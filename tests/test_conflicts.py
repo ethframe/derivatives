@@ -1,15 +1,17 @@
-from derivatives.lexer import make_lexer
-from derivatives import Char, CharRange, string
+from typing import Dict, Set
+
+from derivatives import char, char_range, make_lexer, string
+from derivatives.lexer import select_first
 
 
 def test_conflicts():
-    word = CharRange("a", "z").plus()
-    num = CharRange("0", "9").plus()
+    word = char_range("a", "z").plus()
+    num = char_range("0", "9").plus()
 
-    re_a = (word * Char(" ")).opt() * string("test")
-    re_b = (num * Char(" ")).opt() * string("test")
+    re_a = (word * char(" ")).opt() * string("test")
+    re_b = (num * char(" ")).opt() * string("test")
     re_c = string("test test")
-    re_d = (num * word * Char(" ")) * string("test")
+    re_d = (num * word * char(" ")) * string("test")
     tokens = [
         ("A", re_a),
         ("B", re_b),
@@ -17,4 +19,12 @@ def test_conflicts():
         ("D", re_d),
     ]
 
-    assert make_lexer(tokens).conflicts() == {('A', 'B'), ('A', 'C')}
+    conflicts = set()
+
+    def collect_conflicts(tags: Set[int], names: Dict[int, str]) -> str:
+        if len(tags) > 1:
+            conflicts.add(tuple(sorted(names[tag] for tag in tags)))
+        return select_first(tags, names)
+
+    make_lexer(tokens, collect_conflicts)
+    assert conflicts == {('A', 'B'), ('A', 'C')}
