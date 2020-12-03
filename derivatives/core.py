@@ -80,7 +80,7 @@ class Regex:
         if isinstance(other, Regex):
             if self == other:
                 return Empty()
-            return Subtract(self, other)
+            return self & ~other
         return NotImplemented
 
     def __invert__(self) -> 'Regex':
@@ -246,7 +246,7 @@ class Sequence(Regex):
 
     def __str__(self) -> str:
         def maybe_paren(regex: Regex) -> str:
-            if isinstance(regex, (Choice, Intersect, Subtract)):
+            if isinstance(regex, (Choice, Intersect)):
                 return "({})".format(regex)
             return str(regex)
         return maybe_paren(self._first) + maybe_paren(self._second)
@@ -278,7 +278,7 @@ class Choice(Regex):
 
     def __str__(self) -> str:
         def maybe_paren(regex: Regex) -> str:
-            if isinstance(regex, (Intersect, Subtract)):
+            if isinstance(regex, Intersect):
                 return "({})".format(regex)
             return str(regex)
         return "{}|{}".format(maybe_paren(self._first),
@@ -292,7 +292,7 @@ class Choice(Regex):
                             self._second.derivatives())
 
     def choices(self) -> List[Regex]:
-        return self._first.choices() + self._second.choices()
+        return merge_args(self._first.choices(), self._second.choices())
 
     def _key(self) -> Tuple[Any, ...]:
         return (self._first, self._second)
@@ -359,7 +359,7 @@ class Intersect(Regex):
 
     def __str__(self) -> str:
         def maybe_paren(regex: Regex) -> str:
-            if isinstance(regex, (Choice, Subtract)):
+            if isinstance(regex, Choice):
                 return "({})".format(regex)
             return str(regex)
         return "{}&{}".format(maybe_paren(self._first),
@@ -371,41 +371,6 @@ class Intersect(Regex):
     def derivatives(self) -> Derivatives:
         return merge_intersect(self._first.derivatives(),
                                self._second.derivatives())
-
-    def choices(self) -> List[Regex]:
-        return [self]
-
-    def _key(self) -> Tuple[Any, ...]:
-        return (self._first, self._second)
-
-
-def merge_subtract_item(left: Regex, right: Regex) -> Regex:
-    return left - right
-
-
-merge_subtract = make_merge_fn(merge_subtract_item, merge_subtract_item)
-
-
-class Subtract(Regex):
-
-    def __init__(self, first: Regex, second: Regex):
-        self._first = first
-        self._second = second
-
-    def __str__(self) -> str:
-        def maybe_paren(regex: Regex) -> str:
-            if isinstance(regex, (Choice, Intersect, Subtract)):
-                return "({})".format(regex)
-            return str(regex)
-        return "{}-{}".format(maybe_paren(self._first),
-                              maybe_paren(self._second))
-
-    def nullable(self) -> bool:
-        return self._first.nullable() and not self._second.nullable()
-
-    def derivatives(self) -> Derivatives:
-        return merge_subtract(self._first.derivatives(),
-                              self._second.derivatives())
 
     def choices(self) -> List[Regex]:
         return [self]
