@@ -42,9 +42,6 @@ class Regex:
     def derivatives(self) -> Derivatives:
         raise NotImplementedError()
 
-    def choices(self) -> List['Regex']:
-        raise NotImplementedError()
-
     def __mul__(self, other: object) -> 'Regex':
         if isinstance(other, Empty):
             return other
@@ -54,14 +51,22 @@ class Regex:
             return Sequence(self, other)
         return NotImplemented
 
-    def __or__(self, other: object) -> 'Regex':
-        if isinstance(other, Empty):
+    def _union_one(self, other: 'Regex') -> 'Regex':
+        if self == other:
             return self
+        if self < other:
+            return Union([self, other])
+        return Union([other, self])
+
+    def _union_many(self, other: List['Regex']) -> 'Regex':
+        return Union(merge_args([self], other))
+
+    def union(self, other: 'Regex') -> 'Regex':
+        return other._union_one(self)
+
+    def __or__(self, other: object) -> 'Regex':
         if isinstance(other, Regex):
-            args = merge_args(self.choices(), other.choices())
-            if len(args) == 1:
-                return args[0]
-            return Choice(args)
+            return self.union(other)
         return NotImplemented
 
     def __and__(self, other: object) -> 'Regex':
@@ -96,7 +101,7 @@ class Regex:
         return self * self.star()
 
     def opt(self) -> 'Regex':
-        return self | Epsilon()
+        return self._union_one(Epsilon())
 
     def _key(self) -> Tuple[Any, ...]:
         raise NotImplementedError()
@@ -130,16 +135,17 @@ class Empty(Regex):
     def derivatives(self) -> Derivatives:
         return [(CHARSET_END, Empty())]
 
-    def choices(self) -> List[Regex]:
-        return []
-
     def __mul__(self, other: object) -> Regex:
         return self
 
-    def __or__(self, other: object) -> Regex:
-        if isinstance(other, Regex):
-            return other
-        return NotImplemented
+    def _union_one(self, other: 'Regex') -> 'Regex':
+        return other
+
+    def _union_many(self, other: List['Regex']) -> 'Regex':
+        return Union(other)
+
+    def union(self, other: 'Regex') -> 'Regex':
+        return other
 
     def __and__(self, other: object) -> Regex:
         return self
@@ -161,9 +167,6 @@ class Epsilon(Regex):
 
     def derivatives(self) -> Derivatives:
         return [(CHARSET_END, Empty())]
-
-    def choices(self) -> List[Regex]:
-        return [self]
 
     def __mul__(self, other: object) -> Regex:
         if isinstance(other, Regex):
@@ -216,9 +219,6 @@ class CharRanges(Regex):
             result.append((CHARSET_END, Empty()))
         return result
 
-    def choices(self) -> List[Regex]:
-        return [self]
-
     def _key(self) -> Tuple[Any, ...]:
         return (tuple(self._ranges,))
 
@@ -230,11 +230,11 @@ def append_item(left: Regex, right: Regex) -> Regex:
 append_items = make_update_fn(append_item)
 
 
-def merge_choice_item(left: Regex, right: Regex) -> Regex:
-    return left | right
+def merge_union_item(left: Regex, right: Regex) -> Regex:
+    return left.union(right)
 
 
-merge_choice = make_merge_fn(merge_choice_item, merge_choice_item)
+merge_union = make_merge_fn(merge_union_item, merge_union_item)
 
 
 class Sequence(Regex):
@@ -245,7 +245,7 @@ class Sequence(Regex):
 
     def __str__(self) -> str:
         def maybe_paren(regex: Regex) -> str:
-            if isinstance(regex, (Choice, Intersect)):
+            if isinstance(regex, (Union, Intersect)):
                 return "({})".format(regex)
             return str(regex)
         return maybe_paren(self._first) + maybe_paren(self._second)
@@ -256,11 +256,8 @@ class Sequence(Regex):
     def derivatives(self) -> Derivatives:
         result = append_items(self._first.derivatives(), self._second)
         if self._first.nullable():
-            result = merge_choice(result, self._second.derivatives())
+            result = merge_union(result, self._second.derivatives())
         return result
-
-    def choices(self) -> List[Regex]:
-        return [self]
 
     def __mul__(self, other: object) -> Regex:
         return self._first * (self._second * other)
@@ -269,7 +266,7 @@ class Sequence(Regex):
         return (self._first, self._second)
 
 
-class Choice(Regex):
+class Union(Regex):
 
     def __init__(self, items: List[Regex]):
         self._items = items
@@ -288,11 +285,17 @@ class Choice(Regex):
         items = iter(self._items)
         result = next(items).derivatives()
         for item in items:
-            result = merge_choice(result, item.derivatives())
+            result = merge_union(result, item.derivatives())
         return result
 
-    def choices(self) -> List[Regex]:
-        return self._items
+    def _union_one(self, other: 'Regex') -> 'Regex':
+        return Union(merge_args(self._items, [other]))
+
+    def _union_many(self, other: List['Regex']) -> 'Regex':
+        return Union(merge_args(self._items, other))
+
+    def union(self, other: 'Regex') -> 'Regex':
+        return other._union_many(self._items)
 
     def _key(self) -> Tuple[Any, ...]:
         return (tuple(self._items),)
@@ -313,7 +316,7 @@ class Intersect(Regex):
 
     def __str__(self) -> str:
         def maybe_paren(regex: Regex) -> str:
-            if isinstance(regex, Choice):
+            if isinstance(regex, Union):
                 return "({})".format(regex)
             return str(regex)
         return "{}&{}".format(maybe_paren(self._first),
@@ -325,9 +328,6 @@ class Intersect(Regex):
     def derivatives(self) -> Derivatives:
         return merge_intersect(self._first.derivatives(),
                                self._second.derivatives())
-
-    def choices(self) -> List[Regex]:
-        return [self]
 
     def _key(self) -> Tuple[Any, ...]:
         return (self._first, self._second)
@@ -349,9 +349,6 @@ class Repeat(Regex):
     def derivatives(self) -> Derivatives:
         return append_items(self._regex.derivatives(), self)
 
-    def choices(self) -> List[Regex]:
-        return [self]
-
     def _key(self) -> Tuple[Any, ...]:
         return (self._regex,)
 
@@ -371,9 +368,6 @@ class Invert(Regex):
 
     def derivatives(self) -> Derivatives:
         return [(end, ~item) for end, item in self._regex.derivatives()]
-
-    def choices(self) -> List[Regex]:
-        return [self]
 
     def _key(self) -> Tuple[Any, ...]:
         return (self._regex,)
