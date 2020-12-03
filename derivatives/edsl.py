@@ -2,6 +2,10 @@ from .core import CharRanges, Epsilon, Regex
 from .partition import CHARSET_END
 
 
+def epsilon() -> Regex:
+    return Epsilon()
+
+
 def any_char() -> Regex:
     return CharRanges([(0, CHARSET_END)])
 
