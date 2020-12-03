@@ -58,11 +58,10 @@ class Regex:
         if isinstance(other, Empty):
             return self
         if isinstance(other, Regex):
-            choices = merge_args(self.choices(), other.choices())
-            regex = choices[0]
-            for choice in choices[1:]:
-                regex = Choice(regex, choice)
-            return regex
+            args = merge_args(self.choices(), other.choices())
+            if len(args) == 1:
+                return args[0]
+            return Choice(args)
         return NotImplemented
 
     def __and__(self, other: object) -> 'Regex':
@@ -272,27 +271,63 @@ class Sequence(Regex):
 
 class Choice(Regex):
 
-    def __init__(self, first: Regex, second: Regex):
-        self._first = first
-        self._second = second
+    def __init__(self, items: List[Regex]):
+        self._items = items
 
     def __str__(self) -> str:
         def maybe_paren(regex: Regex) -> str:
             if isinstance(regex, Intersect):
                 return "({})".format(regex)
             return str(regex)
-        return "{}|{}".format(maybe_paren(self._first),
+        return "|".join(maybe_paren(item) for item in self._items)
+
+    def nullable(self) -> bool:
+        return any(item.nullable() for item in self._items)
+
+    def derivatives(self) -> Derivatives:
+        items = iter(self._items)
+        result = next(items).derivatives()
+        for item in items:
+            result = merge_choice(result, item.derivatives())
+        return result
+
+    def choices(self) -> List[Regex]:
+        return self._items
+
+    def _key(self) -> Tuple[Any, ...]:
+        return (tuple(self._items),)
+
+
+def merge_intersect_item(left: Regex, right: Regex) -> Regex:
+    return left & right
+
+
+merge_intersect = make_merge_fn(merge_intersect_item, merge_intersect_item)
+
+
+class Intersect(Regex):
+
+    def __init__(self, first: Regex, second: Regex):
+        self._first = first
+        self._second = second
+
+    def __str__(self) -> str:
+        def maybe_paren(regex: Regex) -> str:
+            if isinstance(regex, Choice):
+                return "({})".format(regex)
+            return str(regex)
+        return "{}&{}".format(maybe_paren(self._first),
                               maybe_paren(self._second))
 
     def nullable(self) -> bool:
-        return self._first.nullable() or self._second.nullable()
+        return self._first.nullable() and self._second.nullable()
 
     def derivatives(self) -> Derivatives:
-        return merge_choice(self._first.derivatives(),
-                            self._second.derivatives())
+        return merge_intersect(self._first.derivatives(),
+                               self._second.derivatives())
 
     def choices(self) -> List[Regex]:
-        return merge_args(self._first.choices(), self._second.choices())
+        return [self]
 
     def _key(self) -> Tuple[Any, ...]:
         return (self._first, self._second)
@@ -342,38 +377,3 @@ class Invert(Regex):
 
     def _key(self) -> Tuple[Any, ...]:
         return (self._regex,)
-
-
-def merge_intersect_item(left: Regex, right: Regex) -> Regex:
-    return left & right
-
-
-merge_intersect = make_merge_fn(merge_intersect_item, merge_intersect_item)
-
-
-class Intersect(Regex):
-
-    def __init__(self, first: Regex, second: Regex):
-        self._first = first
-        self._second = second
-
-    def __str__(self) -> str:
-        def maybe_paren(regex: Regex) -> str:
-            if isinstance(regex, Choice):
-                return "({})".format(regex)
-            return str(regex)
-        return "{}&{}".format(maybe_paren(self._first),
-                              maybe_paren(self._second))
-
-    def nullable(self) -> bool:
-        return self._first.nullable() and self._second.nullable()
-
-    def derivatives(self) -> Derivatives:
-        return merge_intersect(self._first.derivatives(),
-                               self._second.derivatives())
-
-    def choices(self) -> List[Regex]:
-        return [self]
-
-    def _key(self) -> Tuple[Any, ...]:
-        return (self._first, self._second)
