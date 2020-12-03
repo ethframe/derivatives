@@ -1,4 +1,4 @@
-from typing import Any, List, Set, Tuple
+from typing import Any, List, Optional, Set, Tuple
 
 from .partition import CHARSET_END, Partition, make_merge_fn, make_update_fn
 
@@ -121,7 +121,7 @@ class Regex:
         return NotImplemented
 
     def __hash__(self) -> int:
-        val: int = getattr(self, "_hash", None)
+        val: Optional[int] = getattr(self, "_hash", None)
         if val is None:
             self._hash = val = hash((id(self.__class__),) + self._key())
         return val
@@ -203,26 +203,6 @@ class Epsilon(Regex):
 
     def _key(self) -> Tuple[Any, ...]:
         return ()
-
-
-class Tag(Regex):
-    def __init__(self, tag: int):
-        self._tag = tag
-
-    def __str__(self) -> str:
-        return "{{{}}}".format(self._tag)
-
-    def nullable(self) -> bool:
-        return True
-
-    def derivatives(self) -> Derivatives:
-        return [(CHARSET_END, Empty())]
-
-    def tags(self) -> Set[int]:
-        return {self._tag}
-
-    def _key(self) -> Tuple[Any, ...]:
-        return (self._tag,)
 
 
 class CharRanges(Regex):
@@ -313,7 +293,7 @@ class Sequence(Regex):
     def tags(self) -> Set[int]:
         tags = self._first.tags()
         if self._first.nullable():
-            tags |= self._second.tags()
+            tags.update(self._second.tags())
         return tags
 
     def join(self, other: Regex) -> Regex:
@@ -349,7 +329,7 @@ class Union(Regex):
         items = iter(self._items)
         tags = next(items).tags()
         for item in items:
-            tags |= item.tags()
+            tags.update(item.tags())
         return tags
 
     def _union_one(self, other: Regex) -> Regex:
@@ -398,7 +378,7 @@ class Intersect(Regex):
         items = iter(self._items)
         tags = next(items).tags()
         for item in items:
-            tags &= item.tags()
+            tags.intersection_update(item.tags())
         return tags
 
     def _intersect_one(self, other: Regex) -> Regex:
