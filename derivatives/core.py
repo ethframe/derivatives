@@ -42,13 +42,12 @@ class Regex:
     def derivatives(self) -> Derivatives:
         raise NotImplementedError()
 
+    def join(self, other: 'Regex') -> 'Regex':
+        return Sequence(self, other)
+
     def __mul__(self, other: object) -> 'Regex':
-        if isinstance(other, Empty):
-            return other
-        if isinstance(other, Epsilon):
-            return self
         if isinstance(other, Regex):
-            return Sequence(self, other)
+            return self.join(other)
         return NotImplemented
 
     def _union_one(self, other: 'Regex') -> 'Regex':
@@ -88,26 +87,18 @@ class Regex:
         return NotImplemented
 
     def __sub__(self, other: object) -> 'Regex':
-        if isinstance(other, Empty):
-            return self
         if isinstance(other, Regex):
-            if self == other:
-                return Empty()
             return self & ~other
         return NotImplemented
 
     def __invert__(self) -> 'Regex':
-        if isinstance(self, Invert):
-            return self._regex
         return Invert(self)
 
     def star(self) -> 'Regex':
-        if isinstance(self, (Empty, Epsilon, Repeat)):
-            return self
         return Repeat(self)
 
     def plus(self) -> 'Regex':
-        return self * self.star()
+        return self.join(self.star())
 
     def opt(self) -> 'Regex':
         return self._union_one(Epsilon())
@@ -144,7 +135,7 @@ class Empty(Regex):
     def derivatives(self) -> Derivatives:
         return [(CHARSET_END, Empty())]
 
-    def __mul__(self, other: object) -> Regex:
+    def join(self, other: 'Regex') -> 'Regex':
         return self
 
     def _union_one(self, other: 'Regex') -> 'Regex':
@@ -165,8 +156,14 @@ class Empty(Regex):
     def intersect(self, other: 'Regex') -> 'Regex':
         return self
 
-    def __sub__(self, other: object) -> Regex:
+    def star(self) -> 'Regex':
+        return Epsilon()
+
+    def plus(self) -> 'Regex':
         return self
+
+    def opt(self) -> 'Regex':
+        return Epsilon()
 
     def _key(self) -> Tuple[Any, ...]:
         return ()
@@ -183,10 +180,17 @@ class Epsilon(Regex):
     def derivatives(self) -> Derivatives:
         return [(CHARSET_END, Empty())]
 
-    def __mul__(self, other: object) -> Regex:
-        if isinstance(other, Regex):
-            return other
-        return NotImplemented
+    def join(self, other: 'Regex') -> 'Regex':
+        return other
+
+    def star(self) -> 'Regex':
+        return self
+
+    def plus(self) -> 'Regex':
+        return self
+
+    def opt(self) -> 'Regex':
+        return self
 
     def _key(self) -> Tuple[Any, ...]:
         return ()
@@ -274,8 +278,8 @@ class Sequence(Regex):
             result = merge_union(result, self._second.derivatives())
         return result
 
-    def __mul__(self, other: object) -> Regex:
-        return self._first * (self._second * other)
+    def join(self, other: Regex) -> Regex:
+        return Sequence(self._first, self._second.join(other))
 
     def _key(self) -> Tuple[Any, ...]:
         return (self._first, self._second)
@@ -354,7 +358,6 @@ class Intersect(Regex):
     def intersect(self, other: 'Regex') -> 'Regex':
         return other._intersect_many(self._items)
 
-
     def _key(self) -> Tuple[Any, ...]:
         return (tuple(self._items),)
 
@@ -375,6 +378,15 @@ class Repeat(Regex):
     def derivatives(self) -> Derivatives:
         return append_items(self._regex.derivatives(), self)
 
+    def star(self) -> 'Regex':
+        return self
+
+    def plus(self) -> 'Regex':
+        return self
+
+    def opt(self) -> 'Regex':
+        return self
+
     def _key(self) -> Tuple[Any, ...]:
         return (self._regex,)
 
@@ -394,6 +406,9 @@ class Invert(Regex):
 
     def derivatives(self) -> Derivatives:
         return [(end, ~item) for end, item in self._regex.derivatives()]
+
+    def __invert__(self) -> 'Regex':
+        return self._regex
 
     def _key(self) -> Tuple[Any, ...]:
         return (self._regex,)
