@@ -205,12 +205,18 @@ class Epsilon(Regex):
         return ()
 
 
-class Tag(Epsilon):
+class Tag(Regex):
     def __init__(self, tag: int):
         self._tag = tag
 
     def __str__(self) -> str:
         return "{{{}}}".format(self._tag)
+
+    def nullable(self) -> bool:
+        return True
+
+    def derivatives(self) -> Derivatives:
+        return [(CHARSET_END, Empty())]
 
     def tags(self) -> Set[int]:
         return {self._tag}
