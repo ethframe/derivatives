@@ -69,13 +69,22 @@ class Regex:
             return self.union(other)
         return NotImplemented
 
+    def _intersect_one(self, other: 'Regex') -> 'Regex':
+        if self == other:
+            return self
+        if self < other:
+            return Intersect([self, other])
+        return Intersect([other, self])
+
+    def _intersect_many(self, other: List['Regex']) -> 'Regex':
+        return Intersect(merge_args([self], other))
+
+    def intersect(self, other: 'Regex') -> 'Regex':
+        return other._intersect_one(self)
+
     def __and__(self, other: object) -> 'Regex':
-        if isinstance(other, Empty):
-            return other
         if isinstance(other, Regex):
-            if self == other:
-                return self
-            return Intersect(self, other)
+            return self.intersect(other)
         return NotImplemented
 
     def __sub__(self, other: object) -> 'Regex':
@@ -147,7 +156,13 @@ class Empty(Regex):
     def union(self, other: 'Regex') -> 'Regex':
         return other
 
-    def __and__(self, other: object) -> Regex:
+    def _intersect_one(self, other: 'Regex') -> 'Regex':
+        return self
+
+    def _intersect_many(self, other: List['Regex']) -> 'Regex':
+        return self
+
+    def intersect(self, other: 'Regex') -> 'Regex':
         return self
 
     def __sub__(self, other: object) -> Regex:
@@ -302,7 +317,7 @@ class Union(Regex):
 
 
 def merge_intersect_item(left: Regex, right: Regex) -> Regex:
-    return left & right
+    return left.intersect(right)
 
 
 merge_intersect = make_merge_fn(merge_intersect_item, merge_intersect_item)
@@ -310,27 +325,38 @@ merge_intersect = make_merge_fn(merge_intersect_item, merge_intersect_item)
 
 class Intersect(Regex):
 
-    def __init__(self, first: Regex, second: Regex):
-        self._first = first
-        self._second = second
+    def __init__(self, items: List[Regex]):
+        self._items = items
 
     def __str__(self) -> str:
         def maybe_paren(regex: Regex) -> str:
             if isinstance(regex, Union):
                 return "({})".format(regex)
             return str(regex)
-        return "{}&{}".format(maybe_paren(self._first),
-                              maybe_paren(self._second))
+        return "&".join(maybe_paren(item) for item in self._items)
 
     def nullable(self) -> bool:
-        return self._first.nullable() and self._second.nullable()
+        return all(item.nullable() for item in self._items)
 
     def derivatives(self) -> Derivatives:
-        return merge_intersect(self._first.derivatives(),
-                               self._second.derivatives())
+        items = iter(self._items)
+        result = next(items).derivatives()
+        for item in items:
+            result = merge_intersect(result, item.derivatives())
+        return result
+
+    def _intersect_one(self, other: 'Regex') -> 'Regex':
+        return Intersect(merge_args(self._items, [other]))
+
+    def _intersect_many(self, other: List['Regex']) -> 'Regex':
+        return Intersect(merge_args(self._items, other))
+
+    def intersect(self, other: 'Regex') -> 'Regex':
+        return other._intersect_many(self._items)
+
 
     def _key(self) -> Tuple[Any, ...]:
-        return (self._first, self._second)
+        return (tuple(self._items),)
 
 
 class Repeat(Regex):
