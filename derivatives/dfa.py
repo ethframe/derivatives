@@ -21,7 +21,7 @@ def merge_partial_item_inplace(acc: List[Regex], val: Regex) -> List[Regex]:
 merge_partial = make_merge_fn(merge_partial_item, merge_partial_item_inplace)
 
 
-Transitions = Partition['Vector']
+Transitions = Partition["Vector"]
 
 
 class Vector:
@@ -96,7 +96,7 @@ class Dfa:
         def fmt_char(char: str) -> str:
             if char in "\\-[]":
                 return "\\" + char
-            return html.escape(char).encode('unicode_escape').decode('ascii')
+            return html.escape(char).encode("unicode_escape").decode("ascii")
 
         buf = [
             "digraph dfa {",
@@ -107,9 +107,9 @@ class Dfa:
 
         seen_tags: Set[str] = set()
         for state, tags in enumerate(self._tags):
-            shape = 'circle'
+            shape = "circle"
             if tags is not None:
-                shape = 'doublecircle'
+                shape = "doublecircle"
                 seen_tags.update(tags)
             buf.append(
                 '  "{}" [shape={} fixedsize=shape]'.format(state, shape)

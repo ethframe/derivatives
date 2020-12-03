@@ -2,10 +2,10 @@ from typing import Any, List, Tuple
 
 from .partition import CHARSET_END, Partition, make_merge_fn, make_update_fn
 
-Derivatives = Partition['Regex']
+Derivatives = Partition["Regex"]
 
 
-def merge_args(left: List['Regex'], right: List['Regex']) -> List['Regex']:
+def merge_args(left: List["Regex"], right: List["Regex"]) -> List["Regex"]:
     result: List[Regex] = []
     lit = iter(left)
     rit = iter(right)
@@ -42,65 +42,65 @@ class Regex:
     def derivatives(self) -> Derivatives:
         raise NotImplementedError()
 
-    def join(self, other: 'Regex') -> 'Regex':
+    def join(self, other: "Regex") -> "Regex":
         return Sequence(self, other)
 
-    def __mul__(self, other: object) -> 'Regex':
+    def __mul__(self, other: object) -> "Regex":
         if isinstance(other, Regex):
             return self.join(other)
         return NotImplemented
 
-    def _union_one(self, other: 'Regex') -> 'Regex':
+    def _union_one(self, other: "Regex") -> "Regex":
         if self == other:
             return self
         if self < other:
             return Union([self, other])
         return Union([other, self])
 
-    def _union_many(self, other: List['Regex']) -> 'Regex':
+    def _union_many(self, other: List["Regex"]) -> "Regex":
         return Union(merge_args([self], other))
 
-    def union(self, other: 'Regex') -> 'Regex':
+    def union(self, other: "Regex") -> "Regex":
         return other._union_one(self)
 
-    def __or__(self, other: object) -> 'Regex':
+    def __or__(self, other: object) -> "Regex":
         if isinstance(other, Regex):
             return self.union(other)
         return NotImplemented
 
-    def _intersect_one(self, other: 'Regex') -> 'Regex':
+    def _intersect_one(self, other: "Regex") -> "Regex":
         if self == other:
             return self
         if self < other:
             return Intersect([self, other])
         return Intersect([other, self])
 
-    def _intersect_many(self, other: List['Regex']) -> 'Regex':
+    def _intersect_many(self, other: List["Regex"]) -> "Regex":
         return Intersect(merge_args([self], other))
 
-    def intersect(self, other: 'Regex') -> 'Regex':
+    def intersect(self, other: "Regex") -> "Regex":
         return other._intersect_one(self)
 
-    def __and__(self, other: object) -> 'Regex':
+    def __and__(self, other: object) -> "Regex":
         if isinstance(other, Regex):
             return self.intersect(other)
         return NotImplemented
 
-    def __sub__(self, other: object) -> 'Regex':
+    def __sub__(self, other: object) -> "Regex":
         if isinstance(other, Regex):
             return self & ~other
         return NotImplemented
 
-    def __invert__(self) -> 'Regex':
+    def __invert__(self) -> "Regex":
         return Invert(self)
 
-    def star(self) -> 'Regex':
+    def star(self) -> "Regex":
         return Repeat(self)
 
-    def plus(self) -> 'Regex':
+    def plus(self) -> "Regex":
         return self.join(self.star())
 
-    def opt(self) -> 'Regex':
+    def opt(self) -> "Regex":
         return self._union_one(Epsilon())
 
     def _key(self) -> Tuple[Any, ...]:
@@ -135,34 +135,34 @@ class Empty(Regex):
     def derivatives(self) -> Derivatives:
         return [(CHARSET_END, Empty())]
 
-    def join(self, other: 'Regex') -> 'Regex':
+    def join(self, other: Regex) -> Regex:
         return self
 
-    def _union_one(self, other: 'Regex') -> 'Regex':
+    def _union_one(self, other: Regex) -> Regex:
         return other
 
-    def _union_many(self, other: List['Regex']) -> 'Regex':
+    def _union_many(self, other: List[Regex]) -> Regex:
         return Union(other)
 
-    def union(self, other: 'Regex') -> 'Regex':
+    def union(self, other: Regex) -> Regex:
         return other
 
-    def _intersect_one(self, other: 'Regex') -> 'Regex':
+    def _intersect_one(self, other: Regex) -> Regex:
         return self
 
-    def _intersect_many(self, other: List['Regex']) -> 'Regex':
+    def _intersect_many(self, other: List[Regex]) -> Regex:
         return self
 
-    def intersect(self, other: 'Regex') -> 'Regex':
+    def intersect(self, other: Regex) -> Regex:
         return self
 
-    def star(self) -> 'Regex':
+    def star(self) -> Regex:
         return Epsilon()
 
-    def plus(self) -> 'Regex':
+    def plus(self) -> Regex:
         return self
 
-    def opt(self) -> 'Regex':
+    def opt(self) -> Regex:
         return Epsilon()
 
     def _key(self) -> Tuple[Any, ...]:
@@ -180,16 +180,16 @@ class Epsilon(Regex):
     def derivatives(self) -> Derivatives:
         return [(CHARSET_END, Empty())]
 
-    def join(self, other: 'Regex') -> 'Regex':
+    def join(self, other: Regex) -> Regex:
         return other
 
-    def star(self) -> 'Regex':
+    def star(self) -> Regex:
         return self
 
-    def plus(self) -> 'Regex':
+    def plus(self) -> Regex:
         return self
 
-    def opt(self) -> 'Regex':
+    def opt(self) -> Regex:
         return self
 
     def _key(self) -> Tuple[Any, ...]:
@@ -220,8 +220,8 @@ class CharRanges(Regex):
             elif num == 2:
                 parts.append(from_code(start) + from_code(start + 1))
             else:
-                parts.append(from_code(start) + '-' + from_code(end - 1))
-        return '[' + ''.join(parts) + ']'
+                parts.append(from_code(start) + "-" + from_code(end - 1))
+        return "[" + "".join(parts) + "]"
 
     def nullable(self) -> bool:
         return False
@@ -307,13 +307,13 @@ class Union(Regex):
             result = merge_union(result, item.derivatives())
         return result
 
-    def _union_one(self, other: 'Regex') -> 'Regex':
+    def _union_one(self, other: Regex) -> Regex:
         return Union(merge_args(self._items, [other]))
 
-    def _union_many(self, other: List['Regex']) -> 'Regex':
+    def _union_many(self, other: List[Regex]) -> Regex:
         return Union(merge_args(self._items, other))
 
-    def union(self, other: 'Regex') -> 'Regex':
+    def union(self, other: Regex) -> Regex:
         return other._union_many(self._items)
 
     def _key(self) -> Tuple[Any, ...]:
@@ -349,13 +349,13 @@ class Intersect(Regex):
             result = merge_intersect(result, item.derivatives())
         return result
 
-    def _intersect_one(self, other: 'Regex') -> 'Regex':
+    def _intersect_one(self, other: Regex) -> Regex:
         return Intersect(merge_args(self._items, [other]))
 
-    def _intersect_many(self, other: List['Regex']) -> 'Regex':
+    def _intersect_many(self, other: List[Regex]) -> Regex:
         return Intersect(merge_args(self._items, other))
 
-    def intersect(self, other: 'Regex') -> 'Regex':
+    def intersect(self, other: Regex) -> Regex:
         return other._intersect_many(self._items)
 
     def _key(self) -> Tuple[Any, ...]:
@@ -378,13 +378,13 @@ class Repeat(Regex):
     def derivatives(self) -> Derivatives:
         return append_items(self._regex.derivatives(), self)
 
-    def star(self) -> 'Regex':
+    def star(self) -> Regex:
         return self
 
-    def plus(self) -> 'Regex':
+    def plus(self) -> Regex:
         return self
 
-    def opt(self) -> 'Regex':
+    def opt(self) -> Regex:
         return self
 
     def _key(self) -> Tuple[Any, ...]:
@@ -407,7 +407,7 @@ class Invert(Regex):
     def derivatives(self) -> Derivatives:
         return [(end, ~item) for end, item in self._regex.derivatives()]
 
-    def __invert__(self) -> 'Regex':
+    def __invert__(self) -> Regex:
         return self._regex
 
     def _key(self) -> Tuple[Any, ...]:
