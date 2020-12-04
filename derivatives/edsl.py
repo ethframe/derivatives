@@ -1,4 +1,4 @@
-from .core import CharRanges, Epsilon, Regex
+from .core import Derivatives, Empty, Epsilon, Precomputed, Regex
 from .partition import CHARSET_END
 
 
@@ -7,30 +7,41 @@ def epsilon() -> Regex:
 
 
 def any_char() -> Regex:
-    return CharRanges([(0, CHARSET_END)])
+    return Precomputed([(CHARSET_END, Epsilon())])
 
 
 def char(char: str) -> Regex:
-    code = ord(char)
-    return CharRanges([(code, code + 1)])
+    return char_range(char, char)
 
 
 def char_set(chars: str) -> Regex:
-    ranges = []
-    last_end = None
+    derivatives: Derivatives = []
+    end = 0
     for char in sorted(chars):
         code = ord(char)
-        if last_end and last_end == code:
-            last_end = code + 1
-            ranges[-1] = (ranges[-1][0], last_end)
+        if code == end:
+            end += 1
         else:
-            last_end = code + 1
-            ranges.append((code, last_end))
-    return CharRanges(ranges)
+            if end != 0:
+                derivatives.append((end, Epsilon()))
+            derivatives.append((code, Empty()))
+            end = code + 1
+    derivatives.append((end, Epsilon()))
+    if end != CHARSET_END:
+        derivatives.append((CHARSET_END, Empty()))
+    return Precomputed(derivatives)
 
 
 def char_range(start: str, end: str) -> Regex:
-    return CharRanges([(ord(start), ord(end) + 1)])
+    derivatives: Derivatives = []
+    code = ord(start)
+    if code != 0:
+        derivatives.append((code, Empty()))
+    code = ord(end) + 1
+    derivatives.append((code, Epsilon()))
+    if code != CHARSET_END:
+        derivatives.append((CHARSET_END, Empty()))
+    return Precomputed(derivatives)
 
 
 def string(s: str) -> Regex:

@@ -196,31 +196,22 @@ class Epsilon(Regex):
         return ()
 
 
-class CharRanges(Regex):
+class Precomputed(Regex):
 
-    def __init__(self, ranges: List[Tuple[int, int]]):
-        self._ranges = ranges
+    def __init__(self, derivatives: Derivatives):
+        self._derivatives = derivatives
 
     def nullable(self) -> bool:
         return False
 
     def derivatives(self) -> Derivatives:
-        result: Derivatives = []
-        last = 0
-        for start, end in self._ranges:
-            if start > last:
-                result.append((start, Empty()))
-            result.append((end, Epsilon()))
-            last = end
-        if CHARSET_END > last:
-            result.append((CHARSET_END, Empty()))
-        return result
+        return self._derivatives
 
     def tags(self) -> Set[int]:
         return set()
 
     def _key(self) -> Tuple[Any, ...]:
-        return (tuple(self._ranges,))
+        return (tuple(self._derivatives,))
 
 
 def append_item(left: Regex, right: Regex) -> Regex:
