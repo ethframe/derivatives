@@ -33,9 +33,6 @@ def merge_args(left: List["Regex"], right: List["Regex"]) -> List["Regex"]:
 
 class Regex:
 
-    def __str__(self) -> str:
-        raise NotImplementedError()
-
     def nullable(self) -> bool:
         raise NotImplementedError()
 
@@ -129,9 +126,6 @@ class Regex:
 
 class Empty(Regex):
 
-    def __str__(self) -> str:
-        return "\\0"
-
     def nullable(self) -> bool:
         return False
 
@@ -177,9 +171,6 @@ class Empty(Regex):
 
 class Epsilon(Regex):
 
-    def __str__(self) -> str:
-        return "\\e"
-
     def nullable(self) -> bool:
         return True
 
@@ -206,31 +197,9 @@ class Epsilon(Regex):
 
 
 class CharRanges(Regex):
+
     def __init__(self, ranges: List[Tuple[int, int]]):
         self._ranges = ranges
-
-    def __str__(self) -> str:
-        def from_code(code: int) -> str:
-            char = chr(code)
-            if char in "\\{}()+|&~*?.[]":
-                return "\\" + char
-            return char
-        if len(self._ranges) == 1:
-            start, end = self._ranges[0]
-            if start == 0 and end == CHARSET_END:
-                return "."
-            if end - start == 1:
-                return from_code(start)
-        parts = []
-        for start, end in self._ranges:
-            num = end - start
-            if num == 1:
-                parts.append(from_code(start))
-            elif num == 2:
-                parts.append(from_code(start) + from_code(start + 1))
-            else:
-                parts.append(from_code(start) + "-" + from_code(end - 1))
-        return "[" + "".join(parts) + "]"
 
     def nullable(self) -> bool:
         return False
@@ -274,13 +243,6 @@ class Sequence(Regex):
         self._first = first
         self._second = second
 
-    def __str__(self) -> str:
-        def maybe_paren(regex: Regex) -> str:
-            if isinstance(regex, (Union, Intersect)):
-                return "({})".format(regex)
-            return str(regex)
-        return maybe_paren(self._first) + maybe_paren(self._second)
-
     def nullable(self) -> bool:
         return self._first.nullable() and self._second.nullable()
 
@@ -307,13 +269,6 @@ class Union(Regex):
 
     def __init__(self, items: List[Regex]):
         self._items = items
-
-    def __str__(self) -> str:
-        def maybe_paren(regex: Regex) -> str:
-            if isinstance(regex, Intersect):
-                return "({})".format(regex)
-            return str(regex)
-        return "|".join(maybe_paren(item) for item in self._items)
 
     def nullable(self) -> bool:
         return any(item.nullable() for item in self._items)
@@ -357,13 +312,6 @@ class Intersect(Regex):
     def __init__(self, items: List[Regex]):
         self._items = items
 
-    def __str__(self) -> str:
-        def maybe_paren(regex: Regex) -> str:
-            if isinstance(regex, Union):
-                return "({})".format(regex)
-            return str(regex)
-        return "&".join(maybe_paren(item) for item in self._items)
-
     def nullable(self) -> bool:
         return all(item.nullable() for item in self._items)
 
@@ -399,11 +347,6 @@ class Repeat(Regex):
     def __init__(self, regex: Regex):
         self._regex = regex
 
-    def __str__(self) -> str:
-        if isinstance(self._regex, (Empty, Epsilon, CharRanges, Repeat)):
-            return str(self._regex) + "*"
-        return "({})*".format(self._regex)
-
     def nullable(self) -> bool:
         return True
 
@@ -430,11 +373,6 @@ class Invert(Regex):
 
     def __init__(self, regex: Regex):
         self._regex = regex
-
-    def __str__(self) -> str:
-        if isinstance(self._regex, (Empty, Epsilon, CharRanges, Invert)):
-            return "~" + str(self._regex)
-        return "~({})".format(self._regex)
 
     def nullable(self) -> bool:
         return not self._regex.nullable()

@@ -8,9 +8,6 @@ class Tag(Regex):
     def __init__(self, tag: int):
         self._tag = tag
 
-    def __str__(self) -> str:
-        return "{{{}}}".format(self._tag)
-
     def nullable(self) -> bool:
         return True
 
@@ -39,6 +36,7 @@ merge_partial = make_merge_fn(merge_partial_item, merge_partial_item_inplace)
 
 
 class Vector(Regex):
+
     def __init__(self, items: List[Regex]):
         self._items = items
 
