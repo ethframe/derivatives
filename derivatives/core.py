@@ -2,6 +2,7 @@ from typing import Any, List, Optional, Set, Tuple
 
 from .partition import CHARSET_END, Partition, make_merge_fn, make_update_fn
 
+Ranges = Partition[bool]
 Derivatives = Partition["Regex"]
 
 
@@ -49,6 +50,9 @@ class Regex:
         if isinstance(other, Regex):
             return self.join(other)
         return NotImplemented
+
+    def _union_char_class(self, other: Ranges) -> "Regex":
+        return UnionCharClass(other, self)
 
     def _union_one(self, other: "Regex") -> "Regex":
         if self == other:
@@ -196,22 +200,24 @@ class Epsilon(Regex):
         return ()
 
 
-class Precomputed(Regex):
+class CharClass(Regex):
 
-    def __init__(self, derivatives: Derivatives):
-        self._derivatives = derivatives
+    def __init__(self, ranges: Ranges):
+        self._ranges = ranges
 
     def nullable(self) -> bool:
         return False
 
     def derivatives(self) -> Derivatives:
-        return self._derivatives
+        epsilon = Epsilon()
+        empty = Empty()
+        return [(end, epsilon if pos else empty) for end, pos in self._ranges]
 
     def tags(self) -> Set[int]:
         return set()
 
     def _key(self) -> Tuple[Any, ...]:
-        return (tuple(self._derivatives,))
+        return (tuple(self._ranges,))
 
 
 def append_item(left: Regex, right: Regex) -> Regex:
@@ -278,6 +284,9 @@ class Union(Regex):
             tags.update(item.tags())
         return tags
 
+    def _union_char_class(self, other: Ranges) -> Regex:
+        return UnionCharClass(other, self)
+
     def _union_one(self, other: Regex) -> Regex:
         return Union(merge_args(self._items, [other]))
 
@@ -289,6 +298,49 @@ class Union(Regex):
 
     def _key(self) -> Tuple[Any, ...]:
         return (tuple(self._items),)
+
+
+def merge_union_char_class_item(left: Regex, right: bool) -> Regex:
+    return left.union(Epsilon()) if right else left
+
+
+merge_union_char_class = make_merge_fn(merge_union_char_class_item,
+                                       merge_union_char_class_item)
+
+
+merge_char_class = make_merge_fn(bool.__or__, bool.__or__)
+
+
+class UnionCharClass(Regex):
+
+    def __init__(self, ranges: Ranges, regex: Regex):
+        self._ranges = ranges
+        self._regex = regex
+
+    def nullable(self) -> bool:
+        return self._regex.nullable()
+
+    def derivatives(self) -> Derivatives:
+        return merge_union_char_class(self._regex.derivatives(), self._ranges)
+
+    def tags(self) -> Set[int]:
+        return self._regex.tags()
+
+    def _union_char_class(self, other: Ranges) -> Regex:
+        return UnionCharClass(merge_char_class(self._ranges, other),
+                              self._regex)
+
+    def _union_one(self, other: Regex) -> Regex:
+        return UnionCharClass(self._ranges, self._regex._union_one(other))
+
+    def _union_many(self, other: List[Regex]) -> Regex:
+        return UnionCharClass(self._ranges, self._regex._union_many(other))
+
+    def union(self, other: Regex) -> Regex:
+        return other._union_char_class(self._ranges).union(self._regex)
+
+    def _key(self) -> Tuple[Any, ...]:
+        return (tuple(self._ranges), self._regex)
 
 
 def merge_intersect_item(left: Regex, right: Regex) -> Regex:
