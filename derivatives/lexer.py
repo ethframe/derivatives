@@ -1,8 +1,8 @@
 from typing import Callable, Dict, List, Set, Tuple
 
-from .core import Regex
+from .core import Regex, Tag
 from .dfa import Dfa, make_dfa
-from .extensions import Tag, Vector
+from .extensions import Vector
 
 TagResolver = Callable[[Set[int], Dict[int, str]], str]
 

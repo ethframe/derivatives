@@ -4,23 +4,6 @@ from .core import Derivatives, Empty, Regex
 from .partition import CHARSET_END, Partition, make_merge_fn
 
 
-class Tag(Regex):
-    def __init__(self, tag: int):
-        self._tag = tag
-
-    def nullable(self) -> bool:
-        return True
-
-    def derivatives(self) -> Derivatives:
-        return [(CHARSET_END, Empty())]
-
-    def tags(self) -> Set[int]:
-        return {self._tag}
-
-    def _key(self) -> Tuple[Any, ...]:
-        return (self._tag,)
-
-
 def merge_partial_item(acc: List[Regex], val: Regex) -> List[Regex]:
     acc_copy = acc.copy()
     acc_copy.append(val)

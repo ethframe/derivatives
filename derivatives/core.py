@@ -388,3 +388,21 @@ class Invert(Regex):
 
     def _key(self) -> Tuple[Any, ...]:
         return (self._regex,)
+
+
+class Tag(Regex):
+
+    def __init__(self, tag: int):
+        self._tag = tag
+
+    def nullable(self) -> bool:
+        return True
+
+    def derivatives(self) -> Derivatives:
+        return [(CHARSET_END, Empty())]
+
+    def tags(self) -> Set[int]:
+        return {self._tag}
+
+    def _key(self) -> Tuple[Any, ...]:
+        return (self._tag,)
