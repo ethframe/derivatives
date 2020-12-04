@@ -1,5 +1,9 @@
-from .core import CharClass, Epsilon, Ranges, Regex
+from .core import CharClass, Empty, Epsilon, Ranges, Regex, Tag
 from .partition import CHARSET_END
+
+
+def empty() -> Regex:
+    return Empty()
 
 
 def epsilon() -> Regex:
@@ -57,3 +61,7 @@ def any_with(regex: Regex) -> Regex:
 
 def any_without(regex: Regex) -> Regex:
     return ~any_with(regex)
+
+
+def tag(value: int) -> Regex:
+    return Tag(value)
