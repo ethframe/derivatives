@@ -200,6 +200,9 @@ class Epsilon(Regex):
         return ()
 
 
+merge_char_class = make_merge_fn(bool.__or__, bool.__or__)
+
+
 class CharClass(Regex):
 
     def __init__(self, ranges: Ranges):
@@ -215,6 +218,18 @@ class CharClass(Regex):
 
     def tags(self) -> Set[int]:
         return set()
+
+    def _union_char_class(self, other: Ranges) -> Regex:
+        return CharClass(merge_char_class(self._ranges, other))
+
+    def _union_one(self, other: Regex) -> Regex:
+        return UnionCharClass(self._ranges, other)
+
+    def _union_many(self, other: List[Regex]) -> Regex:
+        return UnionCharClass(self._ranges, Union(other))
+
+    def union(self, other: Regex) -> Regex:
+        return other._union_char_class(self._ranges)
 
     def _key(self) -> Tuple[Any, ...]:
         return (tuple(self._ranges,))
@@ -308,9 +323,6 @@ merge_union_char_class = make_merge_fn(merge_union_char_class_item,
                                        merge_union_char_class_item)
 
 
-merge_char_class = make_merge_fn(bool.__or__, bool.__or__)
-
-
 class UnionCharClass(Regex):
 
     def __init__(self, ranges: Ranges, regex: Regex):
@@ -337,7 +349,7 @@ class UnionCharClass(Regex):
         return UnionCharClass(self._ranges, self._regex._union_many(other))
 
     def union(self, other: Regex) -> Regex:
-        return other._union_char_class(self._ranges).union(self._regex)
+        return self._regex.union(other._union_char_class(self._ranges))
 
     def _key(self) -> Tuple[Any, ...]:
         return (tuple(self._ranges), self._regex)
