@@ -1,5 +1,9 @@
-from .core import CharRanges, Epsilon, Regex
+from .core import CharClass, Empty, Epsilon, Ranges, Regex, Tag
 from .partition import CHARSET_END
+
+
+def empty() -> Regex:
+    return Empty()
 
 
 def epsilon() -> Regex:
@@ -7,30 +11,41 @@ def epsilon() -> Regex:
 
 
 def any_char() -> Regex:
-    return CharRanges([(0, CHARSET_END)])
+    return CharClass([(CHARSET_END, True)])
 
 
 def char(char: str) -> Regex:
-    code = ord(char)
-    return CharRanges([(code, code + 1)])
+    return char_range(char, char)
 
 
 def char_set(chars: str) -> Regex:
-    ranges = []
-    last_end = None
+    ranges: Ranges = []
+    end = 0
     for char in sorted(chars):
         code = ord(char)
-        if last_end and last_end == code:
-            last_end = code + 1
-            ranges[-1] = (ranges[-1][0], last_end)
+        if code == end:
+            end += 1
         else:
-            last_end = code + 1
-            ranges.append((code, last_end))
-    return CharRanges(ranges)
+            if end != 0:
+                ranges.append((end, True))
+            ranges.append((code, False))
+            end = code + 1
+    ranges.append((end, True))
+    if end != CHARSET_END:
+        ranges.append((CHARSET_END, False))
+    return CharClass(ranges)
 
 
 def char_range(start: str, end: str) -> Regex:
-    return CharRanges([(ord(start), ord(end) + 1)])
+    ranges: Ranges = []
+    code = ord(start)
+    if code != 0:
+        ranges.append((code, False))
+    code = ord(end) + 1
+    ranges.append((code, True))
+    if code != CHARSET_END:
+        ranges.append((CHARSET_END, False))
+    return CharClass(ranges)
 
 
 def string(s: str) -> Regex:
@@ -46,3 +61,7 @@ def any_with(regex: Regex) -> Regex:
 
 def any_without(regex: Regex) -> Regex:
     return ~any_with(regex)
+
+
+def tag(value: int) -> Regex:
+    return Tag(value)

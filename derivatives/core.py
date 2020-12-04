@@ -1,7 +1,8 @@
 from typing import Any, List, Optional, Set, Tuple
 
-from .partition import CHARSET_END, Partition, make_merge_fn, make_update_fn
+from .partition import CHARSET_END, Partition, make_merge_fn
 
+Ranges = Partition[bool]
 Derivatives = Partition["Regex"]
 
 
@@ -33,9 +34,6 @@ def merge_args(left: List["Regex"], right: List["Regex"]) -> List["Regex"]:
 
 class Regex:
 
-    def __str__(self) -> str:
-        raise NotImplementedError()
-
     def nullable(self) -> bool:
         raise NotImplementedError()
 
@@ -52,6 +50,9 @@ class Regex:
         if isinstance(other, Regex):
             return self.join(other)
         return NotImplemented
+
+    def _union_char_class(self, other: Ranges) -> "Regex":
+        return UnionCharClass(other, self)
 
     def _union_one(self, other: "Regex") -> "Regex":
         if self == other:
@@ -129,9 +130,6 @@ class Regex:
 
 class Empty(Regex):
 
-    def __str__(self) -> str:
-        return "\\0"
-
     def nullable(self) -> bool:
         return False
 
@@ -177,9 +175,6 @@ class Empty(Regex):
 
 class Epsilon(Regex):
 
-    def __str__(self) -> str:
-        return "\\e"
-
     def nullable(self) -> bool:
         return True
 
@@ -205,60 +200,39 @@ class Epsilon(Regex):
         return ()
 
 
-class CharRanges(Regex):
-    def __init__(self, ranges: List[Tuple[int, int]]):
-        self._ranges = ranges
+merge_char_class = make_merge_fn(bool.__or__, bool.__or__)
 
-    def __str__(self) -> str:
-        def from_code(code: int) -> str:
-            char = chr(code)
-            if char in "\\{}()+|&~*?.[]":
-                return "\\" + char
-            return char
-        if len(self._ranges) == 1:
-            start, end = self._ranges[0]
-            if start == 0 and end == CHARSET_END:
-                return "."
-            if end - start == 1:
-                return from_code(start)
-        parts = []
-        for start, end in self._ranges:
-            num = end - start
-            if num == 1:
-                parts.append(from_code(start))
-            elif num == 2:
-                parts.append(from_code(start) + from_code(start + 1))
-            else:
-                parts.append(from_code(start) + "-" + from_code(end - 1))
-        return "[" + "".join(parts) + "]"
+
+class CharClass(Regex):
+
+    def __init__(self, ranges: Ranges):
+        self._ranges = ranges
 
     def nullable(self) -> bool:
         return False
 
     def derivatives(self) -> Derivatives:
-        result: Derivatives = []
-        last = 0
-        for start, end in self._ranges:
-            if start > last:
-                result.append((start, Empty()))
-            result.append((end, Epsilon()))
-            last = end
-        if CHARSET_END > last:
-            result.append((CHARSET_END, Empty()))
-        return result
+        epsilon = Epsilon()
+        empty = Empty()
+        return [(end, epsilon if pos else empty) for end, pos in self._ranges]
 
     def tags(self) -> Set[int]:
         return set()
 
+    def _union_char_class(self, other: Ranges) -> Regex:
+        return CharClass(merge_char_class(self._ranges, other))
+
+    def _union_one(self, other: Regex) -> Regex:
+        return UnionCharClass(self._ranges, other)
+
+    def _union_many(self, other: List[Regex]) -> Regex:
+        return UnionCharClass(self._ranges, Union(other))
+
+    def union(self, other: Regex) -> Regex:
+        return other._union_char_class(self._ranges)
+
     def _key(self) -> Tuple[Any, ...]:
         return (tuple(self._ranges,))
-
-
-def append_item(left: Regex, right: Regex) -> Regex:
-    return left.join(right)
-
-
-append_items = make_update_fn(append_item)
 
 
 def merge_union_item(left: Regex, right: Regex) -> Regex:
@@ -274,18 +248,14 @@ class Sequence(Regex):
         self._first = first
         self._second = second
 
-    def __str__(self) -> str:
-        def maybe_paren(regex: Regex) -> str:
-            if isinstance(regex, (Union, Intersect)):
-                return "({})".format(regex)
-            return str(regex)
-        return maybe_paren(self._first) + maybe_paren(self._second)
-
     def nullable(self) -> bool:
         return self._first.nullable() and self._second.nullable()
 
     def derivatives(self) -> Derivatives:
-        result = append_items(self._first.derivatives(), self._second)
+        result = [
+            (end, item.join(self._second))
+            for end, item in self._first.derivatives()
+        ]
         if self._first.nullable():
             result = merge_union(result, self._second.derivatives())
         return result
@@ -308,13 +278,6 @@ class Union(Regex):
     def __init__(self, items: List[Regex]):
         self._items = items
 
-    def __str__(self) -> str:
-        def maybe_paren(regex: Regex) -> str:
-            if isinstance(regex, Intersect):
-                return "({})".format(regex)
-            return str(regex)
-        return "|".join(maybe_paren(item) for item in self._items)
-
     def nullable(self) -> bool:
         return any(item.nullable() for item in self._items)
 
@@ -332,6 +295,9 @@ class Union(Regex):
             tags.update(item.tags())
         return tags
 
+    def _union_char_class(self, other: Ranges) -> Regex:
+        return UnionCharClass(other, self)
+
     def _union_one(self, other: Regex) -> Regex:
         return Union(merge_args(self._items, [other]))
 
@@ -345,6 +311,46 @@ class Union(Regex):
         return (tuple(self._items),)
 
 
+def merge_union_char_class_item(left: Regex, right: bool) -> Regex:
+    return left.union(Epsilon()) if right else left
+
+
+merge_union_char_class = make_merge_fn(merge_union_char_class_item,
+                                       merge_union_char_class_item)
+
+
+class UnionCharClass(Regex):
+
+    def __init__(self, ranges: Ranges, regex: Regex):
+        self._ranges = ranges
+        self._regex = regex
+
+    def nullable(self) -> bool:
+        return self._regex.nullable()
+
+    def derivatives(self) -> Derivatives:
+        return merge_union_char_class(self._regex.derivatives(), self._ranges)
+
+    def tags(self) -> Set[int]:
+        return self._regex.tags()
+
+    def _union_char_class(self, other: Ranges) -> Regex:
+        return UnionCharClass(merge_char_class(self._ranges, other),
+                              self._regex)
+
+    def _union_one(self, other: Regex) -> Regex:
+        return UnionCharClass(self._ranges, self._regex._union_one(other))
+
+    def _union_many(self, other: List[Regex]) -> Regex:
+        return UnionCharClass(self._ranges, self._regex._union_many(other))
+
+    def union(self, other: Regex) -> Regex:
+        return self._regex.union(other._union_char_class(self._ranges))
+
+    def _key(self) -> Tuple[Any, ...]:
+        return (tuple(self._ranges), self._regex)
+
+
 def merge_intersect_item(left: Regex, right: Regex) -> Regex:
     return left.intersect(right)
 
@@ -356,13 +362,6 @@ class Intersect(Regex):
 
     def __init__(self, items: List[Regex]):
         self._items = items
-
-    def __str__(self) -> str:
-        def maybe_paren(regex: Regex) -> str:
-            if isinstance(regex, Union):
-                return "({})".format(regex)
-            return str(regex)
-        return "&".join(maybe_paren(item) for item in self._items)
 
     def nullable(self) -> bool:
         return all(item.nullable() for item in self._items)
@@ -399,16 +398,13 @@ class Repeat(Regex):
     def __init__(self, regex: Regex):
         self._regex = regex
 
-    def __str__(self) -> str:
-        if isinstance(self._regex, (Empty, Epsilon, CharRanges, Repeat)):
-            return str(self._regex) + "*"
-        return "({})*".format(self._regex)
-
     def nullable(self) -> bool:
         return True
 
     def derivatives(self) -> Derivatives:
-        return append_items(self._regex.derivatives(), self)
+        return [
+            (end, item.join(self)) for end, item in self._regex.derivatives()
+        ]
 
     def tags(self) -> Set[int]:
         return self._regex.tags()
@@ -431,11 +427,6 @@ class Invert(Regex):
     def __init__(self, regex: Regex):
         self._regex = regex
 
-    def __str__(self) -> str:
-        if isinstance(self._regex, (Empty, Epsilon, CharRanges, Invert)):
-            return "~" + str(self._regex)
-        return "~({})".format(self._regex)
-
     def nullable(self) -> bool:
         return not self._regex.nullable()
 
@@ -450,3 +441,21 @@ class Invert(Regex):
 
     def _key(self) -> Tuple[Any, ...]:
         return (self._regex,)
+
+
+class Tag(Regex):
+
+    def __init__(self, tag: int):
+        self._tag = tag
+
+    def nullable(self) -> bool:
+        return True
+
+    def derivatives(self) -> Derivatives:
+        return [(CHARSET_END, Empty())]
+
+    def tags(self) -> Set[int]:
+        return {self._tag}
+
+    def _key(self) -> Tuple[Any, ...]:
+        return (self._tag,)
