@@ -1,6 +1,6 @@
 from typing import Any, List, Optional, Set, Tuple
 
-from .partition import CHARSET_END, Partition, make_merge_fn, make_update_fn
+from .partition import CHARSET_END, Partition, make_merge_fn
 
 Ranges = Partition[bool]
 Derivatives = Partition["Regex"]
@@ -235,13 +235,6 @@ class CharClass(Regex):
         return (tuple(self._ranges,))
 
 
-def append_item(left: Regex, right: Regex) -> Regex:
-    return left.join(right)
-
-
-append_items = make_update_fn(append_item)
-
-
 def merge_union_item(left: Regex, right: Regex) -> Regex:
     return left.union(right)
 
@@ -259,7 +252,10 @@ class Sequence(Regex):
         return self._first.nullable() and self._second.nullable()
 
     def derivatives(self) -> Derivatives:
-        result = append_items(self._first.derivatives(), self._second)
+        result = [
+            (end, item.join(self._second))
+            for end, item in self._first.derivatives()
+        ]
         if self._first.nullable():
             result = merge_union(result, self._second.derivatives())
         return result
@@ -406,7 +402,9 @@ class Repeat(Regex):
         return True
 
     def derivatives(self) -> Derivatives:
-        return append_items(self._regex.derivatives(), self)
+        return [
+            (end, item.join(self)) for end, item in self._regex.derivatives()
+        ]
 
     def tags(self) -> Set[int]:
         return self._regex.tags()
