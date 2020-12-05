@@ -160,18 +160,22 @@ class Dfa:
             for state, transitions in enumerate(self._delta):
                 buf.format("case {}:", state)
                 with buf.indent():
+                    last_end = 0
                     for start, end, target in transitions:
-                        buf.format(
-                            "if (c < {}) {{ return DFA_ERROR; }}", ord(start)
-                        )
+                        err = ord(start)
+                        if last_end < err:
+                            buf.format(
+                                "if (c < {}) {{ return DFA_ERROR; }}", err
+                            )
                         tag = self._tags[target]
                         if tag is None:
                             ret = "DFA_NEED_INPUT"
                         else:
                             ret = "T_{}".format(tag.upper())
+                        last_end = ord(end) + 1
                         buf.format(
                             "if (c < {}) {{ dfa->state = {}; return {}; }}",
-                            ord(end) + 1, target, ret
+                            last_end, target, ret
                         )
                     buf.line("break;")
             buf.line("}")
