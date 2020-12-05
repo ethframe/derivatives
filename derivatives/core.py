@@ -142,6 +142,9 @@ class Empty(Regex):
     def join(self, other: Regex) -> Regex:
         return self
 
+    def _union_char_class(self, other: Ranges) -> Regex:
+        return CharClass(other)
+
     def _union_one(self, other: Regex) -> Regex:
         return other
 
@@ -200,7 +203,7 @@ class Epsilon(Regex):
         return ()
 
 
-merge_char_class = make_merge_fn(bool.__or__, bool.__or__)
+union_ranges = make_merge_fn(bool.__or__)
 
 
 class CharClass(Regex):
@@ -220,7 +223,7 @@ class CharClass(Regex):
         return set()
 
     def _union_char_class(self, other: Ranges) -> Regex:
-        return CharClass(merge_char_class(self._ranges, other))
+        return CharClass(union_ranges(self._ranges, other))
 
     def _union_one(self, other: Regex) -> Regex:
         return UnionCharClass(self._ranges, other)
@@ -235,11 +238,11 @@ class CharClass(Regex):
         return (tuple(self._ranges,))
 
 
-def merge_union_item(left: Regex, right: Regex) -> Regex:
+def union_regexes_items(left: Regex, right: Regex) -> Regex:
     return left.union(right)
 
 
-merge_union = make_merge_fn(merge_union_item, merge_union_item)
+union_regexes = make_merge_fn(union_regexes_items)
 
 
 class Sequence(Regex):
@@ -257,7 +260,7 @@ class Sequence(Regex):
             for end, item in self._first.derivatives()
         ]
         if self._first.nullable():
-            result = merge_union(result, self._second.derivatives())
+            result = union_regexes(result, self._second.derivatives())
         return result
 
     def tags(self) -> Set[int]:
@@ -285,7 +288,7 @@ class Union(Regex):
         items = iter(self._items)
         result = next(items).derivatives()
         for item in items:
-            result = merge_union(result, item.derivatives())
+            result = union_regexes(result, item.derivatives())
         return result
 
     def tags(self) -> Set[int]:
@@ -311,12 +314,11 @@ class Union(Regex):
         return (tuple(self._items),)
 
 
-def merge_union_char_class_item(left: Regex, right: bool) -> Regex:
+def union_regex_ranges_item(left: Regex, right: bool) -> Regex:
     return left.union(Epsilon()) if right else left
 
 
-merge_union_char_class = make_merge_fn(merge_union_char_class_item,
-                                       merge_union_char_class_item)
+union_regex_ranges = make_merge_fn(union_regex_ranges_item)
 
 
 class UnionCharClass(Regex):
@@ -329,13 +331,13 @@ class UnionCharClass(Regex):
         return self._regex.nullable()
 
     def derivatives(self) -> Derivatives:
-        return merge_union_char_class(self._regex.derivatives(), self._ranges)
+        return union_regex_ranges(self._regex.derivatives(), self._ranges)
 
     def tags(self) -> Set[int]:
         return self._regex.tags()
 
     def _union_char_class(self, other: Ranges) -> Regex:
-        return UnionCharClass(merge_char_class(self._ranges, other),
+        return UnionCharClass(union_ranges(self._ranges, other),
                               self._regex)
 
     def _union_one(self, other: Regex) -> Regex:
@@ -351,11 +353,11 @@ class UnionCharClass(Regex):
         return (tuple(self._ranges), self._regex)
 
 
-def merge_intersect_item(left: Regex, right: Regex) -> Regex:
+def intersect_regexes_item(left: Regex, right: Regex) -> Regex:
     return left.intersect(right)
 
 
-merge_intersect = make_merge_fn(merge_intersect_item, merge_intersect_item)
+intersect_regexes = make_merge_fn(intersect_regexes_item)
 
 
 class Intersect(Regex):
@@ -370,7 +372,7 @@ class Intersect(Regex):
         items = iter(self._items)
         result = next(items).derivatives()
         for item in items:
-            result = merge_intersect(result, item.derivatives())
+            result = intersect_regexes(result, item.derivatives())
         return result
 
     def tags(self) -> Set[int]:
