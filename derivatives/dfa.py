@@ -1,12 +1,11 @@
-from contextlib import contextmanager
 import html
 from collections import defaultdict, deque
+from contextlib import contextmanager
 from io import StringIO
 from itertools import count
 from typing import Any, Callable, Dict, Iterator, List, Optional, Set, Tuple
 
 from .core import Regex
-
 
 DfaTransition = Tuple[str, str, int]
 DfaTransitions = List[DfaTransition]
