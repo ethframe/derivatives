@@ -1,4 +1,4 @@
-from typing import Any, List, Optional, Set, Tuple
+from typing import Any, List, Set, Tuple
 
 from .partition import CHARSET_END, Partition, make_merge_fn
 
@@ -33,6 +33,10 @@ def merge_args(left: List["Regex"], right: List["Regex"]) -> List["Regex"]:
 
 
 class Regex:
+
+    def __init__(self, key: Tuple[Any, ...]):
+        self._key = (id(type(self)), *key)
+        self._hash = hash(self._key)
 
     def nullable(self) -> bool:
         raise NotImplementedError()
@@ -107,28 +111,24 @@ class Regex:
     def opt(self) -> "Regex":
         return self._union_one(Epsilon())
 
-    def _key(self) -> Tuple[Any, ...]:
-        raise NotImplementedError()
-
     def __eq__(self, other: object) -> bool:
         if isinstance(other, Regex):
-            return type(self) is type(other) and self._key() == other._key()
+            return self._key == other._key
         return NotImplemented
 
     def __lt__(self, other: object) -> bool:
         if isinstance(other, Regex):
-            return id(type(self)) < id(type(other)) or \
-                type(self) is type(other) and self._key() < other._key()
+            return self._key < other._key
         return NotImplemented
 
     def __hash__(self) -> int:
-        val: Optional[int] = getattr(self, "_hash", None)
-        if val is None:
-            self._hash = val = hash((id(self.__class__),) + self._key())
-        return val
+        return self._hash
 
 
 class Empty(Regex):
+
+    def __init__(self) -> None:
+        super().__init__(())
 
     def nullable(self) -> bool:
         return False
@@ -172,11 +172,11 @@ class Empty(Regex):
     def opt(self) -> Regex:
         return Epsilon()
 
-    def _key(self) -> Tuple[Any, ...]:
-        return ()
-
 
 class Epsilon(Regex):
+
+    def __init__(self) -> None:
+        super().__init__(())
 
     def nullable(self) -> bool:
         return True
@@ -199,9 +199,6 @@ class Epsilon(Regex):
     def opt(self) -> Regex:
         return self
 
-    def _key(self) -> Tuple[Any, ...]:
-        return ()
-
 
 union_ranges = make_merge_fn(bool.__or__)
 
@@ -210,6 +207,7 @@ class CharClass(Regex):
 
     def __init__(self, ranges: Ranges):
         self._ranges = ranges
+        super().__init__(tuple(ranges))
 
     def nullable(self) -> bool:
         return False
@@ -234,9 +232,6 @@ class CharClass(Regex):
     def union(self, other: Regex) -> Regex:
         return other._union_char_class(self._ranges)
 
-    def _key(self) -> Tuple[Any, ...]:
-        return (tuple(self._ranges,))
-
 
 def union_regexes_items(left: Regex, right: Regex) -> Regex:
     return left.union(right)
@@ -250,6 +245,7 @@ class Sequence(Regex):
     def __init__(self, first: Regex, second: Regex):
         self._first = first
         self._second = second
+        super().__init__((first, second))
 
     def nullable(self) -> bool:
         return self._first.nullable() and self._second.nullable()
@@ -272,14 +268,12 @@ class Sequence(Regex):
     def join(self, other: Regex) -> Regex:
         return Sequence(self._first, self._second.join(other))
 
-    def _key(self) -> Tuple[Any, ...]:
-        return (self._first, self._second)
-
 
 class Union(Regex):
 
     def __init__(self, items: List[Regex]):
         self._items = items
+        super().__init__(tuple(items))
 
     def nullable(self) -> bool:
         return any(item.nullable() for item in self._items)
@@ -310,9 +304,6 @@ class Union(Regex):
     def union(self, other: Regex) -> Regex:
         return other._union_many(self._items)
 
-    def _key(self) -> Tuple[Any, ...]:
-        return (tuple(self._items),)
-
 
 def union_regex_ranges_item(left: Regex, right: bool) -> Regex:
     return left.union(Epsilon()) if right else left
@@ -326,6 +317,7 @@ class UnionCharClass(Regex):
     def __init__(self, ranges: Ranges, regex: Regex):
         self._ranges = ranges
         self._regex = regex
+        super().__init__((tuple(ranges), regex))
 
     def nullable(self) -> bool:
         return self._regex.nullable()
@@ -349,9 +341,6 @@ class UnionCharClass(Regex):
     def union(self, other: Regex) -> Regex:
         return self._regex.union(other._union_char_class(self._ranges))
 
-    def _key(self) -> Tuple[Any, ...]:
-        return (tuple(self._ranges), self._regex)
-
 
 def intersect_regexes_item(left: Regex, right: Regex) -> Regex:
     return left.intersect(right)
@@ -364,6 +353,7 @@ class Intersect(Regex):
 
     def __init__(self, items: List[Regex]):
         self._items = items
+        super().__init__(tuple(items))
 
     def nullable(self) -> bool:
         return all(item.nullable() for item in self._items)
@@ -391,14 +381,12 @@ class Intersect(Regex):
     def intersect(self, other: Regex) -> Regex:
         return other._intersect_many(self._items)
 
-    def _key(self) -> Tuple[Any, ...]:
-        return (tuple(self._items),)
-
 
 class Repeat(Regex):
 
     def __init__(self, regex: Regex):
         self._regex = regex
+        super().__init__((regex,))
 
     def nullable(self) -> bool:
         return True
@@ -420,14 +408,12 @@ class Repeat(Regex):
     def opt(self) -> Regex:
         return self
 
-    def _key(self) -> Tuple[Any, ...]:
-        return (self._regex,)
-
 
 class Invert(Regex):
 
     def __init__(self, regex: Regex):
         self._regex = regex
+        super().__init__((regex,))
 
     def nullable(self) -> bool:
         return not self._regex.nullable()
@@ -441,14 +427,12 @@ class Invert(Regex):
     def __invert__(self) -> Regex:
         return self._regex
 
-    def _key(self) -> Tuple[Any, ...]:
-        return (self._regex,)
-
 
 class Tag(Regex):
 
     def __init__(self, tag: int):
         self._tag = tag
+        super().__init__((tag,))
 
     def nullable(self) -> bool:
         return True
@@ -458,6 +442,3 @@ class Tag(Regex):
 
     def tags(self) -> Set[int]:
         return {self._tag}
-
-    def _key(self) -> Tuple[Any, ...]:
-        return (self._tag,)
