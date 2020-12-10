@@ -32,10 +32,24 @@ def merge_args(left: List["Regex"], right: List["Regex"]) -> List["Regex"]:
     return result
 
 
+KIND_EMPTY = 0
+KIND_EPSILON = 1
+KIND_CHAR_CLASS = 2
+KIND_SEQUENCE = 3
+KIND_UNION = 4
+KIND_UNION_CHAR_CLASS = 5
+KIND_INTERSECT = 6
+KIND_REPEAT = 7
+KIND_INVERT = 8
+KIND_TAG = 9
+
+
 class Regex:
 
+    _kind: int
+
     def __init__(self, key: Tuple[Any, ...]):
-        self._key = (id(type(self)), *key)
+        self._key = (self._kind, *key)
         self._hash = hash(self._key)
 
     def nullable(self) -> bool:
@@ -127,6 +141,8 @@ class Regex:
 
 class Empty(Regex):
 
+    _kind = KIND_EMPTY
+
     def __init__(self) -> None:
         super().__init__(())
 
@@ -175,6 +191,8 @@ class Empty(Regex):
 
 class Epsilon(Regex):
 
+    _kind = KIND_EPSILON
+
     def __init__(self) -> None:
         super().__init__(())
 
@@ -204,6 +222,8 @@ union_ranges = make_merge_fn(bool.__or__)
 
 
 class CharClass(Regex):
+
+    _kind = KIND_CHAR_CLASS
 
     def __init__(self, ranges: Ranges):
         self._ranges = ranges
@@ -242,6 +262,8 @@ union_regexes = make_merge_fn(union_regexes_items)
 
 class Sequence(Regex):
 
+    _kind = KIND_SEQUENCE
+
     def __init__(self, first: Regex, second: Regex):
         self._first = first
         self._second = second
@@ -270,6 +292,8 @@ class Sequence(Regex):
 
 
 class Union(Regex):
+
+    _kind = KIND_UNION
 
     def __init__(self, items: List[Regex]):
         self._items = items
@@ -314,6 +338,8 @@ union_regex_ranges = make_merge_fn(union_regex_ranges_item)
 
 class UnionCharClass(Regex):
 
+    _kind = KIND_UNION_CHAR_CLASS
+
     def __init__(self, ranges: Ranges, regex: Regex):
         self._ranges = ranges
         self._regex = regex
@@ -351,6 +377,8 @@ intersect_regexes = make_merge_fn(intersect_regexes_item)
 
 class Intersect(Regex):
 
+    _kind = KIND_INTERSECT
+
     def __init__(self, items: List[Regex]):
         self._items = items
         super().__init__(tuple(items))
@@ -384,6 +412,8 @@ class Intersect(Regex):
 
 class Repeat(Regex):
 
+    _kind = KIND_REPEAT
+
     def __init__(self, regex: Regex):
         self._regex = regex
         super().__init__((regex,))
@@ -411,6 +441,8 @@ class Repeat(Regex):
 
 class Invert(Regex):
 
+    _kind = KIND_INVERT
+
     def __init__(self, regex: Regex):
         self._regex = regex
         super().__init__((regex,))
@@ -429,6 +461,8 @@ class Invert(Regex):
 
 
 class Tag(Regex):
+
+    _kind = KIND_TAG
 
     def __init__(self, tag: int):
         self._tag = tag
