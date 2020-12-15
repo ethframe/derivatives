@@ -123,9 +123,11 @@ class Regex:
         return self.join(self.star())
 
     def opt(self) -> "Regex":
-        return self._union_one(Epsilon())
+        return self._union_one(EPSILON)
 
     def __eq__(self, other: object) -> bool:
+        if self is other:
+            return True
         if isinstance(other, Regex):
             return self._key == other._key
         return NotImplemented
@@ -150,7 +152,7 @@ class Empty(Regex):
         return False
 
     def derivatives(self) -> Derivatives:
-        return [(CHARSET_END, Empty())]
+        return [(CHARSET_END, self)]
 
     def tags(self) -> Set[int]:
         return set()
@@ -180,13 +182,16 @@ class Empty(Regex):
         return self
 
     def star(self) -> Regex:
-        return Epsilon()
+        return EPSILON
 
     def plus(self) -> Regex:
         return self
 
     def opt(self) -> Regex:
-        return Epsilon()
+        return EPSILON
+
+
+EMPTY = Empty()
 
 
 class Epsilon(Regex):
@@ -200,7 +205,7 @@ class Epsilon(Regex):
         return True
 
     def derivatives(self) -> Derivatives:
-        return [(CHARSET_END, Empty())]
+        return [(CHARSET_END, EMPTY)]
 
     def tags(self) -> Set[int]:
         return set()
@@ -218,6 +223,9 @@ class Epsilon(Regex):
         return self
 
 
+EPSILON = Epsilon()
+
+
 union_ranges = make_merge_fn(bool.__or__)
 
 
@@ -233,9 +241,7 @@ class CharClass(Regex):
         return False
 
     def derivatives(self) -> Derivatives:
-        epsilon = Epsilon()
-        empty = Empty()
-        return [(end, epsilon if pos else empty) for end, pos in self._ranges]
+        return [(end, EPSILON if pos else EMPTY) for end, pos in self._ranges]
 
     def tags(self) -> Set[int]:
         return set()
@@ -330,7 +336,7 @@ class Union(Regex):
 
 
 def union_regex_ranges_item(left: Regex, right: bool) -> Regex:
-    return left.union(Epsilon()) if right else left
+    return left.union(EPSILON) if right else left
 
 
 union_regex_ranges = make_merge_fn(union_regex_ranges_item)
@@ -472,7 +478,7 @@ class Tag(Regex):
         return True
 
     def derivatives(self) -> Derivatives:
-        return [(CHARSET_END, Empty())]
+        return [(CHARSET_END, EMPTY)]
 
     def tags(self) -> Set[int]:
         return {self._tag}

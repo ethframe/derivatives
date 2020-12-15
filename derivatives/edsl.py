@@ -1,13 +1,13 @@
-from .core import CharClass, Empty, Epsilon, Ranges, Regex, Tag
+from .core import EMPTY, EPSILON, CharClass, Ranges, Regex, Tag
 from .partition import CHARSET_END
 
 
 def empty() -> Regex:
-    return Empty()
+    return EMPTY
 
 
 def epsilon() -> Regex:
-    return Epsilon()
+    return EPSILON
 
 
 def any_char() -> Regex:
@@ -49,7 +49,7 @@ def char_range(start: str, end: str) -> Regex:
 
 
 def string(s: str) -> Regex:
-    regex: Regex = Epsilon()
+    regex: Regex = EPSILON
     for c in s:
         regex *= char(c)
     return regex
