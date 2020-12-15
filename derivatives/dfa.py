@@ -5,7 +5,7 @@ from io import StringIO
 from itertools import count
 from typing import Any, Callable, Dict, Iterator, List, Optional, Set, Tuple
 
-from .core import Regex
+from .vector import Vector
 
 DfaTransition = Tuple[int, Optional[int], Optional[str]]
 DfaTransitions = List[DfaTransition]
@@ -265,25 +265,25 @@ class Buffer:
         return self._buffer.getvalue()
 
 
-def make_dfa(regex: Regex, tag_resolver: Callable[[Set[int]], str]) -> Dfa:
+def make_dfa(vector: Vector, tag_resolver: Callable[[Set[int]], str]) -> Dfa:
     delta: Dict[int, List[Tuple[int, int, Optional[str]]]] = {}
     eof_tags: Dict[int, str] = {}
 
     incoming: Dict[int, Set[int]] = defaultdict(set)
 
-    state_map: Dict[Regex, int] = defaultdict(count().__next__)
-    queue = deque([(state_map[regex], regex, regex.tags())])
+    state_map: Dict[Vector, int] = defaultdict(count().__next__)
+    queue = deque([(state_map[vector], vector, vector.tags())])
 
     live: Set[int] = set()
 
     while queue:
-        state, regex, state_tags = queue.popleft()
+        state, vector, state_tags = queue.popleft()
         state_delta = delta[state] = []
         if state_tags:
             eof_tags[state] = tag_resolver(state_tags)
             live.add(state)
 
-        for end, target in regex.derivatives():
+        for end, target in vector.transitions():
             len_before = len(state_map)
             target_state = state_map[target]
             target_tags = target.tags()
