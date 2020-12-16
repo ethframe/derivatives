@@ -234,7 +234,6 @@ class Dfa:
             buf.line("}")
             buf.line("return DFA_ERROR;")
         buf.line("}")
-        buf.skip()
         return buf.getvalue()
 
 
@@ -266,33 +265,38 @@ class Buffer:
 
 
 def make_dfa(vector: Vector, tag_resolver: Callable[[Set[int]], str]) -> Dfa:
+
+    def resolve_tag(tags: Set[int]) -> Optional[str]:
+        if tags:
+            return tag_resolver(tags)
+        return None
+
     delta: Dict[int, List[Tuple[int, int, Optional[str]]]] = {}
     eof_tags: Dict[int, str] = {}
 
     incoming: Dict[int, Set[int]] = defaultdict(set)
 
     state_map: Dict[Vector, int] = defaultdict(count().__next__)
-    queue = deque([(state_map[vector], vector, vector.tags())])
+    queue = deque([(state_map[vector], vector, resolve_tag(vector.tags()))])
 
     live: Set[int] = set()
 
     while queue:
-        state, vector, state_tags = queue.popleft()
+        state, vector, state_tag = queue.popleft()
         state_delta = delta[state] = []
-        state_tag: Optional[str] = None
-        if state_tags:
-            state_tag = eof_tags[state] = tag_resolver(state_tags)
+        if state_tag is not None:
+            eof_tags[state] = state_tag
             live.add(state)
 
         for end, target in vector.transitions():
             len_before = len(state_map)
             target_state = state_map[target]
-            target_tags = target.tags()
+            target_tag = resolve_tag(target.tags())
             incoming[target_state].add(state)
             if len(state_map) != len_before:
-                queue.append((target_state, target, target_tags))
+                queue.append((target_state, target, target_tag))
             transition_tag: Optional[str] = None
-            if not target_tags:
+            if target_tag is None:
                 transition_tag = state_tag
             state_delta.append((end, target_state, transition_tag))
 
