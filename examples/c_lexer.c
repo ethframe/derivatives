@@ -3,6 +3,13 @@
 #include "c_lexer.h"
 
 
+void print_token(int token, const char *begin, const char *end) {
+    printf("%s: [", dfa_token_name(token));
+    for (; begin != end; ++begin) { putchar(*begin); }
+    printf("]\n");
+}
+
+
 int lex(const char *s) {
     struct Dfa dfa;
 
@@ -25,14 +32,8 @@ int lex(const char *s) {
             end = s;
         case DFA_END:
             if (end == NULL) { return -1; }
-            if (token != DFA_T_SPACE) {
-                printf("%s: [", dfa_token_name(token));
-                for (; begin != end; ++begin) { putchar(*begin); }
-                printf("]\n");
-            } else {
-                begin = end;
-            }
-            s = end;
+            if (token != DFA_T_SPACE) { print_token(token, begin, end); }
+            s = begin = end;
             end = NULL;
             dfa_reset(&dfa);
             break;
@@ -47,11 +48,7 @@ int lex(const char *s) {
         end = s;
     case DFA_END:
         if (end == NULL) { return -1; }
-        if (token != DFA_T_SPACE) {
-            printf("%s: [", dfa_token_name(token));
-            for (; begin != end; ++begin) { putchar(*begin); }
-            printf("]\n");
-        }
+        if (token != DFA_T_SPACE) { print_token(token, begin, end); }
         return 0;
     }
     return -1;
