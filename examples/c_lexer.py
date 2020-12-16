@@ -1,8 +1,8 @@
 from typing import List, Tuple
 
 from derivatives import (
-    Regex, any_char, any_without, char, char_range, char_set, make_lexer,
-    select_first, string
+    Regex, any_char, any_without, char, char_range, char_set, generate_c,
+    generate_dot, make_lexer, select_first, string
 )
 
 
@@ -19,7 +19,7 @@ def tokens() -> List[Tuple[str, Regex]]:
     P = char_set("Pp") * char_set("+-").opt() * D.plus()
     FS = char_set("fFlL")
     IS = char_set("uU") * (char_set("lL") | string("ll") |
-                          string("LL")).opt() | \
+                           string("LL")).opt() | \
         (char_set("lL") | string("ll") | string("LL")) * char_set("uU").opt()
     CP = char_set("uUL")
     SP = string("u8") | CP
@@ -96,10 +96,10 @@ def main() -> None:
     lex = make_lexer(tokens(), select_first)
 
     with open("c_lexer.dot", "w") as fp:
-        fp.write(lex.to_dot())
+        fp.write(generate_dot(lex))
 
     with open("c_lexer.h", "w") as fp:
-        fp.write(lex.to_c())
+        fp.write(generate_c(lex))
 
 
 if __name__ == "__main__":

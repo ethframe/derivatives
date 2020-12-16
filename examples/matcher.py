@@ -1,4 +1,6 @@
-from derivatives import char, any_with, any_without, make_lexer
+from derivatives import (
+    any_with, any_without, char, generate_c, generate_dot, make_lexer
+)
 
 
 def main() -> None:
@@ -13,10 +15,10 @@ def main() -> None:
         )
     ])
     with open("matcher.dot", "w") as fp:
-        fp.write(lex.to_dot())
+        fp.write(generate_dot(lex))
 
     with open("matcher.h", "w") as fp:
-        fp.write(lex.to_c())
+        fp.write(generate_c(lex))
 
 
 if __name__ == "__main__":
