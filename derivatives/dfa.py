@@ -279,8 +279,9 @@ def make_dfa(vector: Vector, tag_resolver: Callable[[Set[int]], str]) -> Dfa:
     while queue:
         state, vector, state_tags = queue.popleft()
         state_delta = delta[state] = []
+        state_tag: Optional[str] = None
         if state_tags:
-            eof_tags[state] = tag_resolver(state_tags)
+            state_tag = eof_tags[state] = tag_resolver(state_tags)
             live.add(state)
 
         for end, target in vector.transitions():
@@ -290,11 +291,9 @@ def make_dfa(vector: Vector, tag_resolver: Callable[[Set[int]], str]) -> Dfa:
             incoming[target_state].add(state)
             if len(state_map) != len_before:
                 queue.append((target_state, target, target_tags))
-            transition_tags = state_tags - target_tags
-            if transition_tags:
-                transition_tag: Optional[str] = tag_resolver(transition_tags)
-            else:
-                transition_tag = None
+            transition_tag: Optional[str] = None
+            if not target_tags:
+                transition_tag = state_tag
             state_delta.append((end, target_state, transition_tag))
 
     live_queue = deque(live)
