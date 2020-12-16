@@ -100,33 +100,33 @@ def make_dfa(vector: Vector, tag_resolver: Callable[[Set[int]], str]) -> Dfa:
     delta: Dict[int, List[Tuple[int, int, Optional[str]]]] = {}
     eof_tags: Dict[int, str] = {}
 
-    incoming: Dict[int, Set[int]] = defaultdict(set)
-
     state_map: Dict[Vector, int] = defaultdict(count().__next__)
     queue = deque([(state_map[vector], vector, resolve_tag(vector.tags()))])
 
-    live: Set[int] = set()
+    incoming: Dict[int, Set[int]] = defaultdict(set)
 
     while queue:
         state, vector, state_tag = queue.popleft()
         state_delta = delta[state] = []
         if state_tag is not None:
             eof_tags[state] = state_tag
-            live.add(state)
 
         for end, target in vector.transitions():
             len_before = len(state_map)
             target_state = state_map[target]
             target_tag = resolve_tag(target.tags())
-            incoming[target_state].add(state)
             if len(state_map) != len_before:
                 queue.append((target_state, target, target_tag))
+
             transition_tag: Optional[str] = None
             if target_tag is None:
                 transition_tag = state_tag
-            state_delta.append((end, target_state, transition_tag))
 
-    live_queue = deque(live)
+            state_delta.append((end, target_state, transition_tag))
+            incoming[target_state].add(state)
+
+    live = set(eof_tags)
+    live_queue = deque(eof_tags)
     while live_queue:
         state = live_queue.popleft()
         for source_state in incoming[state]:
