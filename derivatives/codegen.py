@@ -95,6 +95,10 @@ def c_token_name(tag: str) -> str:
 def generate_c(dfa: Dfa) -> str:
     buf = Buffer(4)
 
+    buf.line("#ifndef DERIVATIVES_DFA_H")
+    buf.line("#define DERIVATIVES_DFA_H")
+    buf.skip()
+
     buf.line("#include <stdint.h>")
     buf.skip()
 
@@ -123,6 +127,9 @@ def generate_c(dfa: Dfa) -> str:
     generate_c_handle(buf, dfa)
     buf.skip()
     generate_c_handle_eof(buf, dfa)
+    buf.skip()
+
+    buf.line("#endif /* DERIVATIVES_DFA_H */")
     return buf.getvalue()
 
 
