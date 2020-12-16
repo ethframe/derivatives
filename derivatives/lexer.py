@@ -1,8 +1,8 @@
 from typing import Callable, Dict, List, Set, Tuple
 
-from .core import Regex
 from .dfa import Dfa, make_dfa
-from .edsl import empty, tag
+from .edsl import Regex
+from .vector import Vector, VectorItem
 
 TagResolver = Callable[[Set[int], Dict[int, str]], str]
 
@@ -25,13 +25,13 @@ def make_lexer(
         tokens: List[Tuple[str, Regex]],
         tag_resolver: TagResolver = raise_on_conflict) -> Dfa:
 
-    names = {i: name for i, (name, _) in enumerate(tokens)}
+    items: List[VectorItem] = []
+    names: Dict[int, str] = {}
+    for i, (name, regex) in enumerate(tokens):
+        items.append((i, regex.getvalue()))
+        names[i] = name
 
     def dfa_tag_resolver(tags: Set[int]) -> str:
         return tag_resolver(tags, names)
 
-    merged: Regex = empty()
-    for i, (_, regex) in enumerate(tokens):
-        merged = merged.union(regex.join(tag(i)))
-
-    return make_dfa(merged, dfa_tag_resolver)
+    return make_dfa(Vector(items), dfa_tag_resolver)

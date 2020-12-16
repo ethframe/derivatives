@@ -3,11 +3,11 @@ from typing import Any, List, Set, Tuple
 from .partition import CHARSET_END, Partition, make_merge_fn
 
 Ranges = Partition[bool]
-Derivatives = Partition["Regex"]
+Derivatives = Partition["CRegex"]
 
 
-def merge_args(left: List["Regex"], right: List["Regex"]) -> List["Regex"]:
-    result: List[Regex] = []
+def merge_args(left: List["CRegex"], right: List["CRegex"]) -> List["CRegex"]:
+    result: List[CRegex] = []
     lit = iter(left)
     rit = iter(right)
     lval = next(lit, None)
@@ -44,7 +44,7 @@ KIND_INVERT = 8
 KIND_TAG = 9
 
 
-class Regex:
+class CRegex:
 
     _kind: int
 
@@ -61,77 +61,53 @@ class Regex:
     def tags(self) -> Set[int]:
         raise NotImplementedError()
 
-    def join(self, other: "Regex") -> "Regex":
+    def join(self, other: "CRegex") -> "CRegex":
         return Sequence(self, other)
 
-    def __mul__(self, other: object) -> "Regex":
-        if isinstance(other, Regex):
-            return self.join(other)
-        return NotImplemented
-
-    def _union_char_class(self, other: Ranges) -> "Regex":
+    def _union_char_class(self, other: Ranges) -> "CRegex":
         return UnionCharClass(other, self)
 
-    def _union_one(self, other: "Regex") -> "Regex":
+    def _union_one(self, other: "CRegex") -> "CRegex":
         if self == other:
             return self
         if self < other:
             return Union([self, other])
         return Union([other, self])
 
-    def _union_many(self, other: List["Regex"]) -> "Regex":
+    def _union_many(self, other: List["CRegex"]) -> "CRegex":
         return Union(merge_args([self], other))
 
-    def union(self, other: "Regex") -> "Regex":
+    def union(self, other: "CRegex") -> "CRegex":
         return other._union_one(self)
 
-    def __or__(self, other: object) -> "Regex":
-        if isinstance(other, Regex):
-            return self.union(other)
-        return NotImplemented
-
-    def _intersect_one(self, other: "Regex") -> "Regex":
+    def _intersect_one(self, other: "CRegex") -> "CRegex":
         if self == other:
             return self
         if self < other:
             return Intersect([self, other])
         return Intersect([other, self])
 
-    def _intersect_many(self, other: List["Regex"]) -> "Regex":
+    def _intersect_many(self, other: List["CRegex"]) -> "CRegex":
         return Intersect(merge_args([self], other))
 
-    def intersect(self, other: "Regex") -> "Regex":
+    def intersect(self, other: "CRegex") -> "CRegex":
         return other._intersect_one(self)
 
-    def __and__(self, other: object) -> "Regex":
-        if isinstance(other, Regex):
-            return self.intersect(other)
-        return NotImplemented
-
-    def __sub__(self, other: object) -> "Regex":
-        if isinstance(other, Regex):
-            return self & ~other
-        return NotImplemented
-
-    def __invert__(self) -> "Regex":
+    def invert(self) -> "CRegex":
         return Invert(self)
 
-    def star(self) -> "Regex":
+    def repeat(self) -> "CRegex":
         return Repeat(self)
 
-    def plus(self) -> "Regex":
-        return self.join(self.star())
-
-    def opt(self) -> "Regex":
-        return self._union_one(Epsilon())
-
     def __eq__(self, other: object) -> bool:
-        if isinstance(other, Regex):
+        if self is other:
+            return True
+        if isinstance(other, CRegex):
             return self._key == other._key
         return NotImplemented
 
     def __lt__(self, other: object) -> bool:
-        if isinstance(other, Regex):
+        if isinstance(other, CRegex):
             return self._key < other._key
         return NotImplemented
 
@@ -139,7 +115,7 @@ class Regex:
         return self._hash
 
 
-class Empty(Regex):
+class Empty(CRegex):
 
     _kind = KIND_EMPTY
 
@@ -150,46 +126,43 @@ class Empty(Regex):
         return False
 
     def derivatives(self) -> Derivatives:
-        return [(CHARSET_END, Empty())]
+        return [(CHARSET_END, self)]
 
     def tags(self) -> Set[int]:
         return set()
 
-    def join(self, other: Regex) -> Regex:
+    def join(self, other: CRegex) -> CRegex:
         return self
 
-    def _union_char_class(self, other: Ranges) -> Regex:
+    def _union_char_class(self, other: Ranges) -> CRegex:
         return CharClass(other)
 
-    def _union_one(self, other: Regex) -> Regex:
+    def _union_one(self, other: CRegex) -> CRegex:
         return other
 
-    def _union_many(self, other: List[Regex]) -> Regex:
+    def _union_many(self, other: List[CRegex]) -> CRegex:
         return Union(other)
 
-    def union(self, other: Regex) -> Regex:
+    def union(self, other: CRegex) -> CRegex:
         return other
 
-    def _intersect_one(self, other: Regex) -> Regex:
+    def _intersect_one(self, other: CRegex) -> CRegex:
         return self
 
-    def _intersect_many(self, other: List[Regex]) -> Regex:
+    def _intersect_many(self, other: List[CRegex]) -> CRegex:
         return self
 
-    def intersect(self, other: Regex) -> Regex:
+    def intersect(self, other: CRegex) -> CRegex:
         return self
 
-    def star(self) -> Regex:
-        return Epsilon()
-
-    def plus(self) -> Regex:
-        return self
-
-    def opt(self) -> Regex:
-        return Epsilon()
+    def repeat(self) -> CRegex:
+        return EPSILON
 
 
-class Epsilon(Regex):
+EMPTY = Empty()
+
+
+class Epsilon(CRegex):
 
     _kind = KIND_EPSILON
 
@@ -200,28 +173,25 @@ class Epsilon(Regex):
         return True
 
     def derivatives(self) -> Derivatives:
-        return [(CHARSET_END, Empty())]
+        return [(CHARSET_END, EMPTY)]
 
     def tags(self) -> Set[int]:
         return set()
 
-    def join(self, other: Regex) -> Regex:
+    def join(self, other: CRegex) -> CRegex:
         return other
 
-    def star(self) -> Regex:
+    def repeat(self) -> CRegex:
         return self
 
-    def plus(self) -> Regex:
-        return self
 
-    def opt(self) -> Regex:
-        return self
+EPSILON = Epsilon()
 
 
 union_ranges = make_merge_fn(bool.__or__)
 
 
-class CharClass(Regex):
+class CharClass(CRegex):
 
     _kind = KIND_CHAR_CLASS
 
@@ -233,38 +203,36 @@ class CharClass(Regex):
         return False
 
     def derivatives(self) -> Derivatives:
-        epsilon = Epsilon()
-        empty = Empty()
-        return [(end, epsilon if pos else empty) for end, pos in self._ranges]
+        return [(end, EPSILON if pos else EMPTY) for end, pos in self._ranges]
 
     def tags(self) -> Set[int]:
         return set()
 
-    def _union_char_class(self, other: Ranges) -> Regex:
+    def _union_char_class(self, other: Ranges) -> CRegex:
         return CharClass(union_ranges(self._ranges, other))
 
-    def _union_one(self, other: Regex) -> Regex:
+    def _union_one(self, other: CRegex) -> CRegex:
         return UnionCharClass(self._ranges, other)
 
-    def _union_many(self, other: List[Regex]) -> Regex:
+    def _union_many(self, other: List[CRegex]) -> CRegex:
         return UnionCharClass(self._ranges, Union(other))
 
-    def union(self, other: Regex) -> Regex:
+    def union(self, other: CRegex) -> CRegex:
         return other._union_char_class(self._ranges)
 
 
-def union_regexes_items(left: Regex, right: Regex) -> Regex:
+def union_regexes_items(left: CRegex, right: CRegex) -> CRegex:
     return left.union(right)
 
 
 union_regexes = make_merge_fn(union_regexes_items)
 
 
-class Sequence(Regex):
+class Sequence(CRegex):
 
     _kind = KIND_SEQUENCE
 
-    def __init__(self, first: Regex, second: Regex):
+    def __init__(self, first: CRegex, second: CRegex):
         self._first = first
         self._second = second
         super().__init__((first, second))
@@ -287,15 +255,15 @@ class Sequence(Regex):
             tags.update(self._second.tags())
         return tags
 
-    def join(self, other: Regex) -> Regex:
+    def join(self, other: CRegex) -> CRegex:
         return Sequence(self._first, self._second.join(other))
 
 
-class Union(Regex):
+class Union(CRegex):
 
     _kind = KIND_UNION
 
-    def __init__(self, items: List[Regex]):
+    def __init__(self, items: List[CRegex]):
         self._items = items
         super().__init__(tuple(items))
 
@@ -316,31 +284,31 @@ class Union(Regex):
             tags.update(item.tags())
         return tags
 
-    def _union_char_class(self, other: Ranges) -> Regex:
+    def _union_char_class(self, other: Ranges) -> CRegex:
         return UnionCharClass(other, self)
 
-    def _union_one(self, other: Regex) -> Regex:
+    def _union_one(self, other: CRegex) -> CRegex:
         return Union(merge_args(self._items, [other]))
 
-    def _union_many(self, other: List[Regex]) -> Regex:
+    def _union_many(self, other: List[CRegex]) -> CRegex:
         return Union(merge_args(self._items, other))
 
-    def union(self, other: Regex) -> Regex:
+    def union(self, other: CRegex) -> CRegex:
         return other._union_many(self._items)
 
 
-def union_regex_ranges_item(left: Regex, right: bool) -> Regex:
-    return left.union(Epsilon()) if right else left
+def union_regex_ranges_item(left: CRegex, right: bool) -> CRegex:
+    return left.union(EPSILON) if right else left
 
 
 union_regex_ranges = make_merge_fn(union_regex_ranges_item)
 
 
-class UnionCharClass(Regex):
+class UnionCharClass(CRegex):
 
     _kind = KIND_UNION_CHAR_CLASS
 
-    def __init__(self, ranges: Ranges, regex: Regex):
+    def __init__(self, ranges: Ranges, regex: CRegex):
         self._ranges = ranges
         self._regex = regex
         super().__init__((tuple(ranges), regex))
@@ -354,32 +322,32 @@ class UnionCharClass(Regex):
     def tags(self) -> Set[int]:
         return self._regex.tags()
 
-    def _union_char_class(self, other: Ranges) -> Regex:
+    def _union_char_class(self, other: Ranges) -> CRegex:
         return UnionCharClass(union_ranges(self._ranges, other),
                               self._regex)
 
-    def _union_one(self, other: Regex) -> Regex:
+    def _union_one(self, other: CRegex) -> CRegex:
         return UnionCharClass(self._ranges, self._regex._union_one(other))
 
-    def _union_many(self, other: List[Regex]) -> Regex:
+    def _union_many(self, other: List[CRegex]) -> CRegex:
         return UnionCharClass(self._ranges, self._regex._union_many(other))
 
-    def union(self, other: Regex) -> Regex:
+    def union(self, other: CRegex) -> CRegex:
         return self._regex.union(other._union_char_class(self._ranges))
 
 
-def intersect_regexes_item(left: Regex, right: Regex) -> Regex:
+def intersect_regexes_item(left: CRegex, right: CRegex) -> CRegex:
     return left.intersect(right)
 
 
 intersect_regexes = make_merge_fn(intersect_regexes_item)
 
 
-class Intersect(Regex):
+class Intersect(CRegex):
 
     _kind = KIND_INTERSECT
 
-    def __init__(self, items: List[Regex]):
+    def __init__(self, items: List[CRegex]):
         self._items = items
         super().__init__(tuple(items))
 
@@ -400,21 +368,21 @@ class Intersect(Regex):
             tags.intersection_update(item.tags())
         return tags
 
-    def _intersect_one(self, other: Regex) -> Regex:
+    def _intersect_one(self, other: CRegex) -> CRegex:
         return Intersect(merge_args(self._items, [other]))
 
-    def _intersect_many(self, other: List[Regex]) -> Regex:
+    def _intersect_many(self, other: List[CRegex]) -> CRegex:
         return Intersect(merge_args(self._items, other))
 
-    def intersect(self, other: Regex) -> Regex:
+    def intersect(self, other: CRegex) -> CRegex:
         return other._intersect_many(self._items)
 
 
-class Repeat(Regex):
+class Repeat(CRegex):
 
     _kind = KIND_REPEAT
 
-    def __init__(self, regex: Regex):
+    def __init__(self, regex: CRegex):
         self._regex = regex
         super().__init__((regex,))
 
@@ -429,21 +397,15 @@ class Repeat(Regex):
     def tags(self) -> Set[int]:
         return self._regex.tags()
 
-    def star(self) -> Regex:
-        return self
-
-    def plus(self) -> Regex:
-        return self
-
-    def opt(self) -> Regex:
+    def repeat(self) -> CRegex:
         return self
 
 
-class Invert(Regex):
+class Invert(CRegex):
 
     _kind = KIND_INVERT
 
-    def __init__(self, regex: Regex):
+    def __init__(self, regex: CRegex):
         self._regex = regex
         super().__init__((regex,))
 
@@ -451,16 +413,18 @@ class Invert(Regex):
         return not self._regex.nullable()
 
     def derivatives(self) -> Derivatives:
-        return [(end, ~item) for end, item in self._regex.derivatives()]
+        return [
+            (end, item.invert()) for end, item in self._regex.derivatives()
+        ]
 
     def tags(self) -> Set[int]:
         return set()
 
-    def __invert__(self) -> Regex:
+    def invert(self) -> CRegex:
         return self._regex
 
 
-class Tag(Regex):
+class Tag(CRegex):
 
     _kind = KIND_TAG
 
@@ -472,7 +436,7 @@ class Tag(Regex):
         return True
 
     def derivatives(self) -> Derivatives:
-        return [(CHARSET_END, Empty())]
+        return [(CHARSET_END, EMPTY)]
 
     def tags(self) -> Set[int]:
         return {self._tag}

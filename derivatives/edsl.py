@@ -1,17 +1,57 @@
-from .core import CharClass, Empty, Epsilon, Ranges, Regex, Tag
+from .core import EMPTY, EPSILON, CharClass, CRegex, Ranges, Tag
 from .partition import CHARSET_END
 
 
+class Regex:
+    def __init__(self, regex: CRegex):
+        self._regex = regex
+
+    def getvalue(self) -> CRegex:
+        return self._regex
+
+    def __mul__(self, other: object) -> "Regex":
+        if isinstance(other, Regex):
+            return Regex(self._regex.join(other._regex))
+        return NotImplemented
+
+    def __or__(self, other: object) -> "Regex":
+        if isinstance(other, Regex):
+            return Regex(self._regex.union(other._regex))
+        return NotImplemented
+
+    def __and__(self, other: object) -> "Regex":
+        if isinstance(other, Regex):
+            return Regex(self._regex.intersect(other._regex))
+        return NotImplemented
+
+    def __sub__(self, other: object) -> "Regex":
+        if isinstance(other, Regex):
+            return Regex(self._regex.intersect(other._regex.invert()))
+        return NotImplemented
+
+    def __invert__(self) -> "Regex":
+        return Regex(self._regex.invert())
+
+    def star(self) -> "Regex":
+        return Regex(self._regex.repeat())
+
+    def plus(self) -> "Regex":
+        return Regex(self._regex.join(self._regex.repeat()))
+
+    def opt(self) -> "Regex":
+        return Regex(self._regex.union(EPSILON))
+
+
 def empty() -> Regex:
-    return Empty()
+    return Regex(EMPTY)
 
 
 def epsilon() -> Regex:
-    return Epsilon()
+    return Regex(EPSILON)
 
 
 def any_char() -> Regex:
-    return CharClass([(CHARSET_END, True)])
+    return Regex(CharClass([(CHARSET_END, True)]))
 
 
 def char(char: str) -> Regex:
@@ -33,7 +73,7 @@ def char_set(chars: str) -> Regex:
     ranges.append((end, True))
     if end != CHARSET_END:
         ranges.append((CHARSET_END, False))
-    return CharClass(ranges)
+    return Regex(CharClass(ranges))
 
 
 def char_range(start: str, end: str) -> Regex:
@@ -45,11 +85,11 @@ def char_range(start: str, end: str) -> Regex:
     ranges.append((code, True))
     if code != CHARSET_END:
         ranges.append((CHARSET_END, False))
-    return CharClass(ranges)
+    return Regex(CharClass(ranges))
 
 
 def string(s: str) -> Regex:
-    regex: Regex = Epsilon()
+    regex: Regex = Regex(EPSILON)
     for c in s:
         regex *= char(c)
     return regex
@@ -64,4 +104,4 @@ def any_without(regex: Regex) -> Regex:
 
 
 def tag(value: int) -> Regex:
-    return Tag(value)
+    return Regex(Tag(value))

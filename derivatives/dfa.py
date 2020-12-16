@@ -1,43 +1,66 @@
-import html
 from collections import defaultdict, deque
 from itertools import count
 from typing import Callable, Dict, Iterator, List, Optional, Set, Tuple
 
-from .core import Regex
+from .vector import Vector
 
-
-DfaTransition = Tuple[str, str, int]
+DfaTransition = Tuple[int, Optional[int], Optional[str]]
 DfaTransitions = List[DfaTransition]
 DfaDelta = List[DfaTransitions]
 DfaTags = List[Optional[str]]
 
 
 class DfaRunner:
-    def __init__(self, delta: DfaDelta, tags: DfaTags):
-        self._state = 0
+    def __init__(self, delta: DfaDelta, eof_tags: DfaTags):
+        self._state: Optional[int] = 0
         self._delta = delta
-        self._tags = tags
+        self._eof_tags = eof_tags
+        self._tag: Optional[str] = None
 
     def handle(self, char: str) -> bool:
-        for start, end, target in self._delta[self._state]:
-            if start <= char <= end:
+        state = self._state
+        if state is None:
+            return False
+        code = ord(char)
+        for end, target, tag in self._delta[state]:
+            if code < end:
                 self._state = target
+                self._tag = tag
                 return True
-            if char < start:
-                break
         return False
 
+    def handle_eof(self) -> bool:
+        state = self._state
+        if state is None:
+            return False
+        self._tag = self._eof_tags[state]
+        return True
+
     def tag(self) -> Optional[str]:
-        return self._tags[self._state]
+        return self._tag
 
 
 class Dfa:
-    def __init__(self, delta: DfaDelta, tags: DfaTags):
+    def __init__(self, delta: DfaDelta, eof_tags: DfaTags):
         self._delta = delta
-        self._tags = tags
+        self._eof_tags = eof_tags
+
+    def iter_delta(self) -> Iterator[Tuple[int, DfaTransitions]]:
+        return enumerate(self._delta)
+
+    def iter_eof_tags(self) -> Iterator[Tuple[int, Optional[str]]]:
+        return enumerate(self._eof_tags)
+
+    def get_tags_set(self) -> Set[str]:
+        tags = {tag for tag in self._eof_tags if tag is not None}
+        for transitions in self._delta:
+            for _, _, tag in transitions:
+                if tag is not None:
+                    tags.add(tag)
+        return tags
 
     def start(self) -> DfaRunner:
-        return DfaRunner(self._delta, self._tags)
+        return DfaRunner(self._delta, self._eof_tags)
 
     def scan_once(self, input: str) -> Optional[Tuple[str, int]]:
         result: Optional[Tuple[str, int]] = None
@@ -45,12 +68,16 @@ class Dfa:
         tag = runner.tag()
         if tag:
             result = (tag, 0)
-        for pos, char in enumerate(input, 1):
+        for pos, char in enumerate(input):
             if not runner.handle(char):
                 break
             tag = runner.tag()
             if tag:
                 result = (tag, pos)
+        if runner.handle_eof():
+            tag = runner.tag()
+            if tag:
+                result = (tag, len(input))
         return result
 
     def scan_all(self, input: str) -> Iterator[Tuple[str, str]]:
@@ -62,95 +89,44 @@ class Dfa:
             yield tag, input[:pos]
             input = input[pos:]
 
-    def to_dot(self) -> str:
-        def fmt_char(char: str) -> str:
-            if char in "\\-[]":
-                return "\\" + char
-            return html.escape(char).encode("unicode_escape").decode("ascii")
 
-        buf = [
-            "digraph dfa {",
-            "  rankdir=LR",
-            '  "" [shape=none]',
-            '  "" -> "0"'
-        ]
+def make_dfa(vector: Vector, tag_resolver: Callable[[Set[int]], str]) -> Dfa:
 
-        seen_tags: Set[str] = set()
-        for state, tag in enumerate(self._tags):
-            shape = "circle"
-            if tag is not None:
-                shape = "doublecircle"
-                seen_tags.add(tag)
-            buf.append(
-                '  "{}" [shape={} fixedsize=shape]'.format(state, shape)
-            )
+    def resolve_tag(tags: Set[int]) -> Optional[str]:
+        if tags:
+            return tag_resolver(tags)
+        return None
 
-        for tag in sorted(seen_tags):
-            buf.append(
-                '  "t_{0}" [shape=rect style=dashed label="{0}"]'.format(tag)
-            )
+    delta: Dict[int, List[Tuple[int, int, Optional[str]]]] = {}
+    eof_tags: Dict[int, str] = {}
 
-        for state, trantisions in enumerate(self._delta):
-            compact: Dict[int, List[Tuple[str, str]]] = defaultdict(list)
-            for start, end, target in trantisions:
-                compact[target].append((start, end))
-            for target, ranges in compact.items():
-                classes = []
-                for start, end in ranges:
-                    size = ord(end) - ord(start) + 1
-                    if size == 1:
-                        classes.append(fmt_char(start))
-                    elif size <= 3:
-                        classes.append(
-                            "".join(
-                                fmt_char(chr(c))
-                                for c in range(ord(start), ord(end) + 1)
-                            )
-                        )
-                    else:
-                        classes.append(fmt_char(start) + "-" + fmt_char(end))
-                label = "[{}]".format("".join(classes))
-                buf.append(
-                    '  "{}" -> "{}" [label=<{}>]'.format(state, target, label)
-                )
-            tag = self._tags[state]
-            if tag is not None:
-                buf.append(
-                    '  "{}" -> "t_{}" [style=dashed]'.format(state, tag)
-                )
-
-        buf.extend(["}", ""])
-        return "\n".join(buf)
-
-
-def make_dfa(regex: Regex, tag_resolver: Callable[[Set[int]], str]) -> Dfa:
-    delta: Dict[int, DfaTransitions] = {}
-    tags: Dict[int, str] = {}
+    state_map: Dict[Vector, int] = defaultdict(count().__next__)
+    queue = deque([(state_map[vector], vector, resolve_tag(vector.tags()))])
 
     incoming: Dict[int, Set[int]] = defaultdict(set)
 
-    state_map: Dict[Regex, int] = defaultdict(count().__next__)
-    queue = deque([(state_map[regex], regex)])
-
     while queue:
-        state, regex = queue.popleft()
+        state, vector, state_tag = queue.popleft()
         state_delta = delta[state] = []
-        state_tags = regex.tags()
-        if state_tags:
-            tags[state] = tag_resolver(state_tags)
+        if state_tag is not None:
+            eof_tags[state] = state_tag
 
-        last = 0
-        for end, target in regex.derivatives():
+        for end, target in vector.transitions():
             len_before = len(state_map)
             target_state = state_map[target]
-            incoming[target_state].add(state)
+            target_tag = resolve_tag(target.tags())
             if len(state_map) != len_before:
-                queue.append((target_state, target))
-            state_delta.append((chr(last), chr(end - 1), target_state))
-            last = end
+                queue.append((target_state, target, target_tag))
 
-    live = set(tags)
-    live_queue = deque(tags)
+            transition_tag: Optional[str] = None
+            if target_tag is None:
+                transition_tag = state_tag
+
+            state_delta.append((end, target_state, transition_tag))
+            incoming[target_state].add(state)
+
+    live = set(eof_tags)
+    live_queue = deque(eof_tags)
     while live_queue:
         state = live_queue.popleft()
         for source_state in incoming[state]:
@@ -161,14 +137,15 @@ def make_dfa(regex: Regex, tag_resolver: Callable[[Set[int]], str]) -> Dfa:
     new_to_old = sorted(live)
     old_to_new = dict((state, i) for i, state in enumerate(new_to_old))
 
-    return Dfa(
+    pruned_delta = [
         [
-            [
-                (start, end, old_to_new[target])
-                for start, end, target in delta[old_state]
-                if target in old_to_new
-            ]
-            for old_state in new_to_old
-        ],
-        [tags.get(old_state) for old_state in new_to_old],
-    )
+            (end, old_to_new.get(target, None), tag)
+            for end, target, tag in delta[old_state]
+        ]
+        for old_state in new_to_old
+    ]
+    pruned_eof_tags = [
+        eof_tags.get(old_state, None) for old_state in new_to_old
+    ]
+
+    return Dfa(pruned_delta, pruned_eof_tags)

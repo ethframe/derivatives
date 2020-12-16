@@ -1,7 +1,14 @@
-from .core import Regex
+from .codegen import generate_c, generate_dot
 from .dfa import Dfa, DfaRunner, make_dfa
 from .edsl import (
-    any_char, any_with, any_without, char, char_range, char_set, empty,
+    Regex, any_char, any_with, any_without, char, char_range, char_set, empty,
     epsilon, string, tag
 )
-from .lexer import make_lexer
+from .lexer import make_lexer, raise_on_conflict, select_first
+
+__all__ = [
+    "Regex", "Dfa", "DfaRunner", "make_dfa", "any_char", "any_with",
+    "any_without", "char", "char_range", "char_set", "empty", "epsilon",
+    "string", "tag", "make_lexer", "raise_on_conflict", "select_first",
+    "generate_c", "generate_dot"
+]
