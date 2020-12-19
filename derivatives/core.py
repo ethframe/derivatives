@@ -1,6 +1,6 @@
 from typing import Any, List, Set, Tuple
 
-from .partition import CHARSET_END, Partition, make_merge_fn
+from .partition import CHARSET_END, Partition, make_merge_copy_fn
 
 Ranges = Partition[bool]
 Derivatives = Partition["CRegex"]
@@ -188,7 +188,7 @@ class Epsilon(CRegex):
 EPSILON = Epsilon()
 
 
-union_ranges = make_merge_fn(bool.__or__)
+union_ranges = make_merge_copy_fn(bool.__or__)
 
 
 class CharClass(CRegex):
@@ -225,7 +225,7 @@ def union_regexes_items(left: CRegex, right: CRegex) -> CRegex:
     return left.union(right)
 
 
-union_regexes = make_merge_fn(union_regexes_items)
+union_regexes = make_merge_copy_fn(union_regexes_items)
 
 
 class Sequence(CRegex):
@@ -301,7 +301,7 @@ def union_regex_ranges_item(left: CRegex, right: bool) -> CRegex:
     return left.union(EPSILON) if right else left
 
 
-union_regex_ranges = make_merge_fn(union_regex_ranges_item)
+union_regex_ranges = make_merge_copy_fn(union_regex_ranges_item)
 
 
 class UnionCharClass(CRegex):
@@ -340,7 +340,7 @@ def intersect_regexes_item(left: CRegex, right: CRegex) -> CRegex:
     return left.intersect(right)
 
 
-intersect_regexes = make_merge_fn(intersect_regexes_item)
+intersect_regexes = make_merge_copy_fn(intersect_regexes_item)
 
 
 class Intersect(CRegex):
