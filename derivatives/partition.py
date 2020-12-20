@@ -1,7 +1,6 @@
-import sys
 from typing import Callable, Iterable, List, Tuple, TypeVar
 
-CHARSET_END = sys.maxunicode + 1
+CHARSET_END = 0x100
 
 T = TypeVar('T')
 U = TypeVar('U')

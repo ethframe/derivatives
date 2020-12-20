@@ -1,5 +1,5 @@
 from collections import defaultdict, deque
-from itertools import count
+from itertools import count, groupby
 from typing import Callable, Dict, Iterator, List, Optional, Set, Tuple
 
 from .vector import Vector
@@ -17,11 +17,10 @@ class DfaRunner:
         self._eof_tags = eof_tags
         self._tag: Optional[str] = None
 
-    def handle(self, char: str) -> bool:
+    def handle(self, code: int) -> bool:
         state = self._state
         if state is None:
             return False
-        code = ord(char)
         for end, target, tag in self._delta[state]:
             if code < end:
                 self._state = target
@@ -62,7 +61,7 @@ class Dfa:
     def start(self) -> DfaRunner:
         return DfaRunner(self._delta, self._eof_tags)
 
-    def scan_once(self, input: str) -> Optional[Tuple[str, int]]:
+    def scan_once(self, input: bytes) -> Optional[Tuple[str, int]]:
         result: Optional[Tuple[str, int]] = None
         runner = self.start()
         tag = runner.tag()
@@ -80,7 +79,7 @@ class Dfa:
                 result = (tag, len(input))
         return result
 
-    def scan_all(self, input: str) -> Iterator[Tuple[str, str]]:
+    def scan_all(self, input: bytes) -> Iterator[Tuple[str, bytes]]:
         while input:
             result = self.scan_once(input)
             if result is None:
@@ -138,10 +137,10 @@ def make_dfa(vector: Vector, tag_resolver: Callable[[Set[int]], str]) -> Dfa:
     old_to_new = dict((state, i) for i, state in enumerate(new_to_old))
 
     pruned_delta = [
-        [
+        compress_transitions([
             (end, old_to_new.get(target, None), tag)
             for end, target, tag in delta[old_state]
-        ]
+        ])
         for old_state in new_to_old
     ]
     pruned_eof_tags = [
@@ -149,3 +148,10 @@ def make_dfa(vector: Vector, tag_resolver: Callable[[Set[int]], str]) -> Dfa:
     ]
 
     return Dfa(pruned_delta, pruned_eof_tags)
+
+
+def compress_transitions(transitions: DfaTransitions) -> DfaTransitions:
+    result: DfaTransitions = []
+    for _, group in groupby(transitions, lambda x: (x[1], x[2])):
+        result.append(list(group)[-1])
+    return result

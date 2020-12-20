@@ -100,9 +100,9 @@ def c_lexer(c_tokens):
 
 
 def c_lex(c_lexer, string):
-    for tag, value in c_lexer.scan_all(string):
+    for tag, value in c_lexer.scan_all(string.encode('utf-8')):
         if tag != "space":
-            yield tag, value
+            yield tag, value.decode('utf-8')
 
 
 TEST_SOURCE = """
