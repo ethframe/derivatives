@@ -109,10 +109,6 @@ def generate_c(dfa: Dfa) -> str:
     buf.line("#include <stdint.h>")
     buf.skip()
 
-    buf.line("#define DFA_ERROR -1")
-    buf.line("#define DFA_END 0")
-    buf.skip()
-
     generate_c_tokens(buf, dfa)
     buf.skip()
 
@@ -152,7 +148,7 @@ def generate_c_tokens(buf: Buffer, dfa: Dfa) -> None:
 
 def generate_c_match(buf: Buffer, dfa: Dfa) -> None:
     buf.line(
-        "static inline int dfa_match(const char *s, struct DfaMatch *match) {"
+        "static inline void dfa_match(const char *s, struct DfaMatch *match) {"
     )
     with buf.indent():
         buf.line("unsigned char c;")
@@ -181,7 +177,7 @@ def c_transition_action(target: Optional[int], tag: Optional[str]) -> str:
             "match->token = {};".format(c_token_name(tag))
         ])
     if target is None:
-        action.append("return DFA_END;")
+        action.append("return;")
     else:
         action.append("goto S{};".format(target))
     return " ".join(action)

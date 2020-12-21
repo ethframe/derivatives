@@ -14,17 +14,12 @@ int lex(const char *s) {
     struct DfaMatch match;
 
     while (*s) {
-        switch (dfa_match(s, &match)) {
-        case DFA_END:
-            if (match.end == NULL) { return -1; }
-            if (match.token != DFA_T_SPACE) {
-                print_token(match.token, match.begin, match.end);
-            }
-            s = match.end;
-            break;
-        case DFA_ERROR:
-            return -1;
+        dfa_match(s, &match);
+        if (match.end == NULL) { return -1; }
+        if (match.token != DFA_T_SPACE) {
+            print_token(match.token, match.begin, match.end);
         }
+        s = match.end;
     }
     return 0;
 }

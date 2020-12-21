@@ -6,10 +6,8 @@
 int test(const char *s) {
     struct DfaMatch match;
 
-    if (dfa_match(s, &match) == DFA_END) {
-        return (match.end != NULL && *match.end == '\0') ? 1 : 0;
-    }
-    return 0;
+    dfa_match(s, &match);
+    return (match.end != NULL && *match.end == '\0') ? 1 : 0;
 }
 
 
