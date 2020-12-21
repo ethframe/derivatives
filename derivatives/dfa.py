@@ -139,16 +139,13 @@ def make_dfa(vector: Vector, tag_resolver: Callable[[Set[int]], str]) -> Dfa:
     new_to_old = sorted(live)
     old_to_new = dict((state, i) for i, state in enumerate(new_to_old))
 
-    pruned_delta = [
-        compress_transitions([
-            (end, old_to_new.get(target, None), tag)
-            for end, target, tag in delta[old_state]
-        ])
-        for old_state in new_to_old
-    ]
-    pruned_eof_tags = [
-        eof_tags.get(old_state, None) for old_state in new_to_old
-    ]
+    pruned_delta: DfaDelta = []
+    for old_state in new_to_old:
+        transitions: DfaTransitions = [(1, None, eof_tags.get(old_state))]
+        for end, old_target, tag in delta[old_state]:
+            transitions.append((end, old_to_new.get(old_target, None), tag))
+        pruned_delta.append(compress_transitions(transitions))
+    pruned_eof_tags = [eof_tags.get(old_state) for old_state in new_to_old]
 
     return Dfa(pruned_delta, pruned_eof_tags)
 

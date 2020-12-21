@@ -26,6 +26,7 @@ int lex(const char *s) {
             return -1;
         }
     }
+    return 0;
 }
 
 

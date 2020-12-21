@@ -163,10 +163,6 @@ def generate_c_match(buf: Buffer, dfa: Dfa) -> None:
             with buf.dedent():
                 buf.format("S{}:", state)
             buf.line("c = *(s++);")
-            buf.format(
-                "if (c == 0) {{ {} }}",
-                c_transition_action(None, dfa.get_eof_tag(state))
-            )
             for end, target, tag in transitions:
                 buf.format(
                     "if (c < {}) {{ {} }}",
