@@ -5,6 +5,7 @@ from io import StringIO
 from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 from .dfa import Dfa
+from .partition import CHARSET_END
 
 
 class Buffer:
@@ -154,7 +155,7 @@ def generate_c_match(buf: Buffer, dfa: Dfa) -> None:
         "static inline int dfa_match(const char *s, struct DfaMatch *match) {"
     )
     with buf.indent():
-        buf.line("char c;")
+        buf.line("unsigned char c;")
         buf.skip()
         buf.line("match->begin = s;")
         buf.line("match->end = NULL;")
@@ -164,11 +165,11 @@ def generate_c_match(buf: Buffer, dfa: Dfa) -> None:
                 buf.format("S{}:", state)
             buf.line("c = *(s++);")
             for end, target, tag in transitions:
-                buf.format(
-                    "if (c < {}) {{ {} }}",
-                    end, c_transition_action(target, tag)
-                )
-            buf.line("return DFA_ERROR;")
+                action = c_transition_action(target, tag)
+                if end == CHARSET_END:
+                    buf.line(action)
+                else:
+                    buf.format("if (c < {}) {{ {} }}", end, action)
     buf.line("}")
 
 

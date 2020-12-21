@@ -31,5 +31,5 @@ int lex(const char *s) {
 
 
 int main() {
-    return lex("int main() { int r = foo(1, \"a\"); if (r == 1) { bar(); } return 0; }");
+    return lex("int main() { int r = foo(1, \"\xd0\x90\"); if (r == 1) { bar(); } return 0; }");
 }
