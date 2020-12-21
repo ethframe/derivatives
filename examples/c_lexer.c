@@ -11,47 +11,21 @@ void print_token(int token, const char *begin, const char *end) {
 
 
 int lex(const char *s) {
-    struct Dfa dfa;
-
-    const char *begin = s;
-    const char *end = NULL;
-    int token;
-
-    dfa_reset(&dfa);
+    struct DfaMatch match;
 
     while (*s) {
-        switch (dfa_handle(&dfa, *s)) {
-        case DFA_MATCH:
-            token = dfa.token;
-            end = s;
-        case DFA_CONTINUE:
-            ++s;
-            break;
-        case DFA_END_MATCH:
-            token = dfa.token;
-            end = s;
+        switch (dfa_match(s, &match)) {
         case DFA_END:
-            if (end == NULL) { return -1; }
-            if (token != DFA_T_SPACE) { print_token(token, begin, end); }
-            s = begin = end;
-            end = NULL;
-            dfa_reset(&dfa);
+            if (match.end == NULL) { return -1; }
+            if (match.token != DFA_T_SPACE) {
+                print_token(match.token, match.begin, match.end);
+            }
+            s = match.end;
             break;
         case DFA_ERROR:
             return -1;
         }
     }
-
-    switch (dfa_handle_eof(&dfa)) {
-    case DFA_END_MATCH:
-        token = dfa.token;
-        end = s;
-    case DFA_END:
-        if (end == NULL) { return -1; }
-        if (token != DFA_T_SPACE) { print_token(token, begin, end); }
-        return 0;
-    }
-    return -1;
 }
 
 

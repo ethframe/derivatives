@@ -29,6 +29,7 @@ def tokens() -> List[Tuple[str, Regex]]:
 
     tokens = [
         ("comment", string("/*") * any_without(string("*/")) * string("*/")),
+        ("comment", string("//") * (any_char() & (~char("\n"))).star()),
     ]
 
     keywords = [

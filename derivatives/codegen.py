@@ -4,7 +4,7 @@ from contextlib import contextmanager
 from io import StringIO
 from typing import Any, Dict, Iterator, List, Optional, Tuple
 
-from .dfa import Dfa, DfaTransition
+from .dfa import Dfa
 
 
 class Buffer:
@@ -18,6 +18,12 @@ class Buffer:
         self._level += 1
         yield
         self._level -= 1
+
+    @contextmanager
+    def dedent(self) -> Iterator[None]:
+        self._level -= 1
+        yield
+        self._level += 1
 
     def skip(self, n: int = 1) -> None:
         self._buffer.write("\n" * n)
@@ -103,30 +109,21 @@ def generate_c(dfa: Dfa) -> str:
     buf.skip()
 
     buf.line("#define DFA_ERROR -1")
-    buf.line("#define DFA_CONTINUE 0")
-    buf.line("#define DFA_MATCH 1")
-    buf.line("#define DFA_END 2")
-    buf.line("#define DFA_END_MATCH 3")
+    buf.line("#define DFA_END 0")
     buf.skip()
 
     generate_c_tokens(buf, dfa)
     buf.skip()
 
-    buf.line("struct Dfa {")
+    buf.line("struct DfaMatch {")
     with buf.indent():
-        buf.line("unsigned int state;")
+        buf.line("const char *begin;")
+        buf.line("const char *end;")
         buf.line("unsigned int token;")
     buf.line("};")
     buf.skip()
-    buf.line("static inline void dfa_reset(struct Dfa *dfa) {")
-    with buf.indent():
-        buf.line("dfa->state = 0;")
-    buf.line("}")
-    buf.skip()
 
-    generate_c_handle(buf, dfa)
-    buf.skip()
-    generate_c_handle_eof(buf, dfa)
+    generate_c_match(buf, dfa)
     buf.skip()
 
     buf.line("#endif /* DERIVATIVES_DFA_H */")
@@ -152,59 +149,42 @@ def generate_c_tokens(buf: Buffer, dfa: Dfa) -> None:
     buf.line("};")
 
 
-def generate_c_handle(buf: Buffer, dfa: Dfa) -> None:
-    buf.line("static inline int dfa_handle(struct Dfa *dfa, uint32_t c) {")
+def generate_c_match(buf: Buffer, dfa: Dfa) -> None:
+    buf.line(
+        "static inline int dfa_match(const char *s, struct DfaMatch *match) {"
+    )
     with buf.indent():
-        buf.line("switch (dfa->state) {")
+        buf.line("char c;")
+        buf.skip()
+        buf.line("match->begin = s;")
+        buf.line("match->end = NULL;")
+        buf.skip()
         for state, transitions in dfa.iter_delta():
-            buf.format("case {}:", state)
-            with buf.indent():
-                generate_c_transitions(buf, transitions)
-                buf.line("break;")
-        buf.line("}")
-        buf.line("return DFA_ERROR;")
+            with buf.dedent():
+                buf.format("S{}:", state)
+            buf.line("c = *(s++);")
+            buf.format(
+                "if (c == 0) {{ {} }}",
+                c_transition_action(None, dfa.get_eof_tag(state))
+            )
+            for end, target, tag in transitions:
+                buf.format(
+                    "if (c < {}) {{ {} }}",
+                    end, c_transition_action(target, tag)
+                )
+            buf.line("return DFA_ERROR;")
     buf.line("}")
 
 
-def generate_c_transitions(
-        buf: Buffer, transitions: List[DfaTransition]) -> None:
-    for end, target, tag in transitions:
-        if tag is None:
-            if target is None:
-                buf.format("if (c < {}) {{ return DFA_END; }}", end)
-            else:
-                buf.format(
-                    "if (c < {}) {{ dfa->state = {}; return DFA_CONTINUE; }}",
-                    end, target
-                )
-        else:
-            if target is None:
-                buf.format(
-                    "if (c < {}) {{ dfa->token = {}; return DFA_END_MATCH; }}",
-                    end, c_token_name(tag)
-                )
-            else:
-                buf.format(
-                    "if (c < {}) {{ dfa->token = {};"
-                    " dfa->state = {}; return DFA_MATCH; }}",
-                    end, c_token_name(tag), target
-                )
-
-
-def generate_c_handle_eof(buf: Buffer, dfa: Dfa) -> None:
-    buf.line("static inline int dfa_handle_eof(struct Dfa *dfa) {")
-    with buf.indent():
-        buf.line("switch (dfa->state) {")
-        for state, tag in dfa.iter_eof_tags():
-            if tag is None:
-                continue
-            buf.format("case {}:", state)
-            with buf.indent():
-                buf.format("dfa->token = {};", c_token_name(tag))
-                buf.format("return DFA_END_MATCH;")
-        buf.line("default:")
-        with buf.indent():
-            buf.format("return DFA_END;")
-        buf.line("}")
-        buf.line("return DFA_ERROR;")
-    buf.line("}")
+def c_transition_action(target: Optional[int], tag: Optional[str]) -> str:
+    action: List[str] = []
+    if tag is not None:
+        action.extend([
+            "match->end = s - 1;",
+            "match->token = {};".format(c_token_name(tag))
+        ])
+    if target is None:
+        action.append("return DFA_END;")
+    else:
+        action.append("goto S{};".format(target))
+    return " ".join(action)

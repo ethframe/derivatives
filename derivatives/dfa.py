@@ -50,6 +50,9 @@ class Dfa:
     def iter_eof_tags(self) -> Iterator[Tuple[int, Optional[str]]]:
         return enumerate(self._eof_tags)
 
+    def get_eof_tag(self, state: int) -> Optional[str]:
+        return self._eof_tags[state]
+
     def get_tags_set(self) -> Set[str]:
         tags = {tag for tag in self._eof_tags if tag is not None}
         for transitions in self._delta:
