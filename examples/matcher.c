@@ -7,7 +7,7 @@ int test(const char *s) {
     struct DfaMatch match;
 
     dfa_match(s, &match);
-    return (match.end != NULL && *match.end == '\0') ? 1 : 0;
+    return (match.token == DFA_T_RE && *match.end == '\0') ? 1 : 0;
 }
 
 

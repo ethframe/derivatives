@@ -15,7 +15,7 @@ int lex(const char *s) {
 
     while (*s) {
         dfa_match(s, &match);
-        if (match.end == NULL) { return -1; }
+        if (match.token == DFA_INVALID_TOKEN) { return -1; }
         if (match.token != DFA_T_SPACE) {
             print_token(match.token, match.begin, match.end);
         }

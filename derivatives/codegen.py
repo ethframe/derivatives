@@ -4,7 +4,7 @@ from contextlib import contextmanager
 from io import StringIO
 from typing import Any, Dict, Iterator, List, Optional, Tuple
 
-from .dfa import Dfa
+from .dfa import Dfa, DfaTransitions
 from .partition import CHARSET_END
 
 
@@ -20,22 +20,21 @@ class Buffer:
         yield
         self._level -= 1
 
-    @contextmanager
-    def dedent(self) -> Iterator[None]:
-        self._level -= 1
-        yield
-        self._level += 1
-
     def skip(self, n: int = 1) -> None:
         self._buffer.write("\n" * n)
 
-    def line(self, s: str) -> None:
+    def line(self, s: str, *args: Any, **kwargs: Any) -> None:
+        if args or kwargs:
+            s = s.format(*args, **kwargs)
         self._buffer.write(self._indent * self._level)
         self._buffer.write(s)
         self._buffer.write("\n")
 
-    def format(self, s: str, *args: Any, **kwargs: Any) -> None:
-        self.line(s.format(*args, **kwargs))
+    def unindented(self, s: str, *args: Any, **kwargs: Any) -> None:
+        if args or kwargs:
+            s = s.format(*args, **kwargs)
+        self._buffer.write(s)
+        self._buffer.write("\n")
 
     def getvalue(self) -> str:
         return self._buffer.getvalue()
@@ -58,9 +57,9 @@ def generate_dot(dfa: Dfa) -> str:
         buf.line('"end" [shape=doublecircle]')
 
         for state, tag in dfa.iter_eof_tags():
-            buf.format('"{}" [shape=circle fixedsize=shape]', state)
+            buf.line('"{}" [shape=circle fixedsize=shape]', state)
             if tag:
-                buf.format('"{}" -> "end" [label="EOF/{}"]', state, tag)
+                buf.line('"{}" -> "end" [label="EOF/{}"]', state, tag)
 
         for state, trantisions in dfa.iter_delta():
             grouped: Dict[
@@ -87,9 +86,7 @@ def generate_dot(dfa: Dfa) -> str:
                 if tag is not None:
                     label += "/" + tag
                 if target is not None:
-                    buf.format(
-                        '"{}" -> "{}" [label=<{}>]', state, target, label
-                    )
+                    buf.line('"{}" -> "{}" [label=<{}>]', state, target, label)
 
     buf.line("}")
     return buf.getvalue()
@@ -130,8 +127,9 @@ def generate_c(dfa: Dfa) -> str:
 def generate_c_tokens(buf: Buffer, dfa: Dfa) -> None:
     tokens = sorted(dfa.get_tags_set())
 
-    for value, tag in enumerate(tokens):
-        buf.format("#define {} {}", c_token_name(tag), value)
+    buf.line("#define DFA_INVALID_TOKEN 0")
+    for value, tag in enumerate(tokens, 1):
+        buf.line("#define {} {}", c_token_name(tag), value)
     buf.skip()
 
     buf.line("static const char *dfa_token_name(int t) {")
@@ -139,10 +137,10 @@ def generate_c_tokens(buf: Buffer, dfa: Dfa) -> None:
         buf.line("static const char *table[] = {")
         with buf.indent():
             for name in tokens:
-                buf.format('"{}",', name)
+                buf.line('"{}",', name)
         buf.line("};")
-        buf.format("if (t < 0 || t >= {}) {{ return NULL; }}", len(tokens))
-        buf.format("return table[t];")
+        buf.line("if (t < 0 || t >= {}) {{ return NULL; }}", len(tokens))
+        buf.line("return table[t];")
     buf.line("};")
 
 
@@ -153,19 +151,18 @@ def generate_c_match(buf: Buffer, dfa: Dfa) -> None:
     with buf.indent():
         buf.line("unsigned char c;")
         buf.skip()
-        buf.line("match->begin = s;")
-        buf.line("match->end = NULL;")
+        buf.line("match->begin = match->end = s;")
+        buf.line("match->token = DFA_INVALID_TOKEN;")
         buf.skip()
         for state, transitions in dfa.iter_delta():
-            with buf.dedent():
-                buf.format("S{}:", state)
+            buf.unindented("S{}:", state)
             buf.line("c = *(s++);")
             for end, target, tag in transitions:
                 action = c_transition_action(target, tag)
                 if end == CHARSET_END:
                     buf.line(action)
                 else:
-                    buf.format("if (c < {}) {{ {} }}", end, action)
+                    buf.line("if (c < {}) {{ {} }}", end, action)
     buf.line("}")
 
 
