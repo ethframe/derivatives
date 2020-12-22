@@ -4,7 +4,7 @@ from contextlib import contextmanager
 from io import StringIO
 from typing import Any, Dict, Iterator, List, Optional, Tuple
 
-from .dfa import Dfa, DfaTransitions
+from .dfa import Dfa
 from .partition import CHARSET_END
 
 
@@ -63,14 +63,14 @@ def generate_dot(dfa: Dfa) -> str:
 
         for state, trantisions in dfa.iter_delta():
             grouped: Dict[
-                Tuple[Optional[int], Optional[str]],
+                Tuple[Optional[int], Optional[str], bool],
                 List[Tuple[int, int]]
             ] = defaultdict(list)
             last = 0
-            for end, target, tag in trantisions:
-                grouped[(target, tag)].append((last, end - 1))
+            for end, target, tag, lookahead in trantisions:
+                grouped[(target, tag, lookahead)].append((last, end - 1))
                 last = end
-            for (target, tag), ranges in grouped.items():
+            for (target, tag, lookahead), ranges in grouped.items():
                 classes = []
                 for start, end in ranges:
                     size = end - start + 1
@@ -84,9 +84,14 @@ def generate_dot(dfa: Dfa) -> str:
                         classes.append(fmt_char(start) + "-" + fmt_char(end))
                 label = "[{}]".format("".join(classes))
                 if tag is not None:
-                    label += "/" + tag
+                    if lookahead:
+                        label += "/" + tag + "."
+                    else:
+                        label += "/." + tag
                 if target is not None:
                     buf.line('"{}" -> "{}" [label=<{}>]', state, target, label)
+                elif tag is not None:
+                    buf.line('"{}" -> "end" [label=<{}>]', state, label)
 
     buf.line("}")
     return buf.getvalue()
@@ -139,8 +144,8 @@ def generate_c_tokens(buf: Buffer, dfa: Dfa) -> None:
             for name in tokens:
                 buf.line('"{}",', name)
         buf.line("};")
-        buf.line("if (t < 0 || t >= {}) {{ return NULL; }}", len(tokens))
-        buf.line("return table[t];")
+        buf.line("if (t <= 0 || t > {}) {{ return NULL; }}", len(tokens))
+        buf.line("return table[t - 1];")
     buf.line("};")
 
 
@@ -157,8 +162,8 @@ def generate_c_match(buf: Buffer, dfa: Dfa) -> None:
         for state, transitions in dfa.iter_delta():
             buf.unindented("S{}:", state)
             buf.line("c = *(s++);")
-            for end, target, tag in transitions:
-                action = c_transition_action(target, tag)
+            for end, target, tag, lookahead in transitions:
+                action = c_transition_action(target, tag, lookahead)
                 if end == CHARSET_END:
                     buf.line(action)
                 else:
@@ -166,13 +171,15 @@ def generate_c_match(buf: Buffer, dfa: Dfa) -> None:
     buf.line("}")
 
 
-def c_transition_action(target: Optional[int], tag: Optional[str]) -> str:
+def c_transition_action(
+        target: Optional[int], tag: Optional[str], lookahead: bool) -> str:
     action: List[str] = []
     if tag is not None:
-        action.extend([
-            "match->end = s - 1;",
-            "match->token = {};".format(c_token_name(tag))
-        ])
+        if lookahead:
+            action.append("match->end = s - 1;")
+        else:
+            action.append("match->end = s;")
+        action.append("match->token = {};".format(c_token_name(tag)))
     if target is None:
         action.append("return;")
     else:

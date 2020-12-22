@@ -4,39 +4,10 @@ from typing import Callable, Dict, Iterator, List, Optional, Set, Tuple
 
 from .vector import Vector
 
-DfaTransition = Tuple[int, Optional[int], Optional[str]]
+DfaTransition = Tuple[int, Optional[int], Optional[str], bool]
 DfaTransitions = List[DfaTransition]
 DfaDelta = List[DfaTransitions]
 DfaTags = List[Optional[str]]
-
-
-class DfaRunner:
-    def __init__(self, delta: DfaDelta, eof_tags: DfaTags):
-        self._state: Optional[int] = 0
-        self._delta = delta
-        self._eof_tags = eof_tags
-        self._tag: Optional[str] = None
-
-    def handle(self, code: int) -> bool:
-        state = self._state
-        if state is None:
-            return False
-        for end, target, tag in self._delta[state]:
-            if code < end:
-                self._state = target
-                self._tag = tag
-                return True
-        return False
-
-    def handle_eof(self) -> bool:
-        state = self._state
-        if state is None:
-            return False
-        self._tag = self._eof_tags[state]
-        return True
-
-    def tag(self) -> Optional[str]:
-        return self._tag
 
 
 class Dfa:
@@ -56,30 +27,26 @@ class Dfa:
     def get_tags_set(self) -> Set[str]:
         tags = {tag for tag in self._eof_tags if tag is not None}
         for transitions in self._delta:
-            for _, _, tag in transitions:
+            for _, _, tag, _ in transitions:
                 if tag is not None:
                     tags.add(tag)
         return tags
 
-    def start(self) -> DfaRunner:
-        return DfaRunner(self._delta, self._eof_tags)
-
     def scan_once(self, input: bytes) -> Optional[Tuple[str, int]]:
         result: Optional[Tuple[str, int]] = None
-        runner = self.start()
-        tag = runner.tag()
-        if tag:
-            result = (tag, 0)
-        for pos, char in enumerate(input):
-            if not runner.handle(char):
-                break
-            tag = runner.tag()
-            if tag:
-                result = (tag, pos)
-        if runner.handle_eof():
-            tag = runner.tag()
-            if tag:
-                result = (tag, len(input))
+        state: int = 0
+        for pos, code in enumerate(input):
+            for end, target, tag, lookahead in self._delta[state]:
+                if code < end:
+                    if tag is not None:
+                        result = (tag, pos if lookahead else pos + 1)
+                    if target is None:
+                        return result
+                    state = target
+                    break
+        tag = self._eof_tags[state]
+        if tag is not None:
+            result = (tag, len(input))
         return result
 
     def scan_all(self, input: bytes) -> Iterator[Tuple[str, bytes]]:
@@ -123,26 +90,33 @@ def make_dfa(vector: Vector, tag_resolver: Callable[[Set[int]], str]) -> Dfa:
             state_delta.append((end, target_state))
             incoming[target_state].add(state)
 
+    lookahead_states: Set[int] = set()
     live = set(eof_tags)
     live_queue = deque(eof_tags)
     while live_queue:
         state = live_queue.popleft()
         for source_state in incoming[state]:
+            lookahead_states.add(source_state)
             if source_state not in live:
                 live.add(source_state)
                 live_queue.append(source_state)
 
-    new_to_old = sorted(live)
+    definite_states = live - lookahead_states
+    new_to_old = sorted(lookahead_states)
     old_to_new = dict((state, i) for i, state in enumerate(new_to_old))
 
     pruned_delta: DfaDelta = []
     for old_state in new_to_old:
         source_tag = eof_tags.get(old_state)
-        transitions: DfaTransitions = [(1, None, source_tag)]
+        transitions: DfaTransitions = [(1, None, source_tag, True)]
         for end, old_target in delta[old_state]:
-            target_tag = eof_tags.get(old_target)
-            tag = source_tag if target_tag is None else None
-            transitions.append((end, old_to_new.get(old_target), tag))
+            lookahead = old_target not in definite_states
+            tag = eof_tags.get(old_target)
+            if lookahead and tag is None:
+                tag = source_tag
+            transitions.append(
+                (end, old_to_new.get(old_target), tag, lookahead)
+            )
         pruned_delta.append(compress_transitions(transitions))
     pruned_eof_tags = [eof_tags.get(old_state) for old_state in new_to_old]
 
