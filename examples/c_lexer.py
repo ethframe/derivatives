@@ -28,8 +28,13 @@ def tokens() -> List[Tuple[str, Regex]]:
     WS = char_set(" \t\v\n\f")
 
     tokens = [
-        ("comment", string("/*") * any_without(string("*/")) * string("*/")),
-        ("comment", string("//") * (any_char() & (~char("\n"))).star()),
+        (
+            "comment",
+            (
+                string("/*") * any_without(string("*/")) * string("*/") | 
+                string("//") * (any_char() & (~char("\n"))).star()
+            )
+        ),
     ]
 
     keywords = [

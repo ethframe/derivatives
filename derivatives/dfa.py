@@ -108,7 +108,7 @@ def make_dfa(vector: Vector, tag_resolver: Callable[[Set[int]], str]) -> Dfa:
     pruned_delta: DfaDelta = []
     for old_state in new_to_old:
         source_tag = eof_tags.get(old_state)
-        transitions: DfaTransitions = [(1, None, source_tag, True)]
+        transitions: DfaTransitions = []
         for end, old_target in delta[old_state]:
             lookahead = old_target not in definite_states
             tag = eof_tags.get(old_target)

@@ -4,7 +4,7 @@ from contextlib import contextmanager
 from io import StringIO
 from typing import Any, Dict, Iterator, List, Optional, Tuple
 
-from .dfa import Dfa
+from .dfa import Dfa, DfaTransition, DfaTransitions
 from .partition import CHARSET_END
 
 
@@ -150,9 +150,16 @@ def generate_c_tokens(buf: Buffer, dfa: Dfa) -> None:
 
 
 def generate_c_match(buf: Buffer, dfa: Dfa) -> None:
+    buf.unindented("#ifdef DFA_USE_LIMIT")
+    buf.line(
+        "static inline void dfa_match(const char *s, const char *limit,"
+        " struct DfaMatch *match) {"
+    )
+    buf.unindented("#else")
     buf.line(
         "static inline void dfa_match(const char *s, struct DfaMatch *match) {"
     )
+    buf.unindented("#endif")
     with buf.indent():
         buf.line("unsigned char c;")
         buf.skip()
@@ -161,14 +168,48 @@ def generate_c_match(buf: Buffer, dfa: Dfa) -> None:
         buf.skip()
         for state, transitions in dfa.iter_delta():
             buf.unindented("S{}:", state)
-            buf.line("c = *(s++);")
-            for end, target, tag, lookahead in transitions:
-                action = c_transition_action(target, tag, lookahead)
-                if end == CHARSET_END:
-                    buf.line(action)
-                else:
-                    buf.line("if (c < {}) {{ {} }}", end, action)
+            eof_tag = dfa.get_eof_tag(state)
+            first, *rest = transitions
+            generate_c_eof_transition(buf, first, eof_tag)
+            generate_c_transitions(buf, rest)
     buf.line("}")
+
+
+def generate_c_eof_transition(
+        buf: Buffer, first: DfaTransition, eof_tag: Optional[str]) -> None:
+    eof_action = c_transition_action(None, eof_tag, True)
+    end, target, tag, lookahead = first
+    first_action = c_transition_action(target, tag, lookahead)
+    first_transition = c_transition_condition(end, first_action)
+    handles_null = target is None and tag == eof_tag and lookahead
+    must_be_replaced = end == 1 and not handles_null
+    buf.unindented("#ifdef DFA_USE_LIMIT")
+    buf.line("if (s == limit) {{ {} }}", eof_action)
+    if not handles_null:
+        buf.line("c = *(s++);")
+    if must_be_replaced:
+        buf.line(first_transition)
+    if not handles_null:
+        buf.unindented("#else")
+        buf.line("c = *(s++);")
+        buf.line("if (c < 1) {{ {} }}", eof_action)
+    buf.unindented("#endif")
+    if handles_null:
+        buf.line("c = *(s++);")
+    if not must_be_replaced:
+        buf.line(first_transition)
+
+
+def generate_c_transitions(buf: Buffer, transitions: DfaTransitions) -> None:
+    for end, target, tag, lookahead in transitions:
+        action = c_transition_action(target, tag, lookahead)
+        buf.line(c_transition_condition(end, action))
+
+
+def c_transition_condition(end: int, action: str) -> str:
+    if end == CHARSET_END:
+        return action
+    return "if (c < {}) {{ {} }}".format(end, action)
 
 
 def c_transition_action(
