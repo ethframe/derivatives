@@ -99,7 +99,7 @@ def make_dfa(vector: Vector, tag_resolver: Callable[[Set[int]], str]) -> Dfa:
             return tag_resolver(tags)
         return None
 
-    delta: Dict[int, List[Tuple[int, int, Optional[str]]]] = {}
+    delta: Dict[int, List[Tuple[int, int]]] = {}
     eof_tags: Dict[int, str] = {}
 
     state_map: Dict[Vector, int] = defaultdict(count().__next__)
@@ -120,11 +120,7 @@ def make_dfa(vector: Vector, tag_resolver: Callable[[Set[int]], str]) -> Dfa:
             if len(state_map) != len_before:
                 queue.append((target_state, target, target_tag))
 
-            transition_tag: Optional[str] = None
-            if target_tag is None:
-                transition_tag = state_tag
-
-            state_delta.append((end, target_state, transition_tag))
+            state_delta.append((end, target_state))
             incoming[target_state].add(state)
 
     live = set(eof_tags)
@@ -141,9 +137,12 @@ def make_dfa(vector: Vector, tag_resolver: Callable[[Set[int]], str]) -> Dfa:
 
     pruned_delta: DfaDelta = []
     for old_state in new_to_old:
-        transitions: DfaTransitions = [(1, None, eof_tags.get(old_state))]
-        for end, old_target, tag in delta[old_state]:
-            transitions.append((end, old_to_new.get(old_target, None), tag))
+        source_tag = eof_tags.get(old_state)
+        transitions: DfaTransitions = [(1, None, source_tag)]
+        for end, old_target in delta[old_state]:
+            target_tag = eof_tags.get(old_target)
+            tag = source_tag if target_tag is None else None
+            transitions.append((end, old_to_new.get(old_target), tag))
         pruned_delta.append(compress_transitions(transitions))
     pruned_eof_tags = [eof_tags.get(old_state) for old_state in new_to_old]
 
