@@ -100,9 +100,9 @@ def c_lexer(c_tokens):
 
 
 def c_lex(c_lexer, string):
-    for tag, value in c_lexer.scan_all(string):
+    for tag, value in c_lexer.scan_all(string.encode('utf-8')):
         if tag != "space":
-            yield tag, value
+            yield tag, value.decode('utf-8')
 
 
 TEST_SOURCE = """
@@ -110,7 +110,7 @@ size_t strlen(const char *s)
 {
     /** Simple strlen function **/
     size_t i;
-    for (i = 0; s[i] != '\0'; i++);
+    for (i = 0; s[i] != '\\0'; i++);
     return i;
 }
 """
@@ -145,7 +145,7 @@ TEST_TOKENS = [
     ('ident', 'i'),
     ('rbracket', ']'),
     ('neop', '!='),
-    ('charconst', "'\x00'"),
+    ('charconst', "'\\0'"),
     ('semicolon', ';'),
     ('ident', 'i'),
     ('incop', '++'),

@@ -1,5 +1,7 @@
-from .core import EMPTY, EPSILON, CharClass, CRegex, Ranges, Tag
-from .partition import CHARSET_END
+import sys
+
+from .core import EMPTY, EPSILON, CRegex, Tag
+from .utf8 import utf8_range_regex
 
 
 class Regex:
@@ -51,7 +53,7 @@ def epsilon() -> Regex:
 
 
 def any_char() -> Regex:
-    return Regex(CharClass([(CHARSET_END, True)]))
+    return Regex(utf8_range_regex(0, sys.maxunicode))
 
 
 def char(char: str) -> Regex:
@@ -59,33 +61,24 @@ def char(char: str) -> Regex:
 
 
 def char_set(chars: str) -> Regex:
-    ranges: Ranges = []
-    end = 0
+    regex: CRegex = EMPTY
+    start = 0
+    end = -1
     for char in sorted(chars):
         code = ord(char)
         if code == end:
             end += 1
         else:
-            if end != 0:
-                ranges.append((end, True))
-            ranges.append((code, False))
-            end = code + 1
-    ranges.append((end, True))
-    if end != CHARSET_END:
-        ranges.append((CHARSET_END, False))
-    return Regex(CharClass(ranges))
+            if end != -1:
+                regex = regex.union(utf8_range_regex(start, end))
+            start = end = code
+    if end != -1:
+        regex = regex.union(utf8_range_regex(start, end))
+    return Regex(regex)
 
 
 def char_range(start: str, end: str) -> Regex:
-    ranges: Ranges = []
-    code = ord(start)
-    if code != 0:
-        ranges.append((code, False))
-    code = ord(end) + 1
-    ranges.append((code, True))
-    if code != CHARSET_END:
-        ranges.append((CHARSET_END, False))
-    return Regex(CharClass(ranges))
+    return Regex(utf8_range_regex(ord(start), ord(end)))
 
 
 def string(s: str) -> Regex:

@@ -1,7 +1,7 @@
 from typing import List, Optional, Set, Tuple
 
 from .core import EMPTY, CRegex
-from .partition import CHARSET_END, Partition, make_merge_inplace_fn
+from .partition import CHARSET_END, Partition, make_merge_fn
 
 VectorItem = Tuple[int, CRegex]
 
@@ -23,9 +23,7 @@ def vector_append_inplace(
     return left
 
 
-vector_append = make_merge_inplace_fn(
-    vector_append_copy, vector_append_inplace
-)
+vector_append = make_merge_fn(vector_append_inplace, vector_append_copy)
 
 
 class Vector:
