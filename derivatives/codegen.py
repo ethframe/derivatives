@@ -177,14 +177,15 @@ def generate_c_match(buf: Buffer, dfa: Dfa) -> None:
 
 def generate_c_eof_transition(
         buf: Buffer, first: DfaTransition, eof_tag: Optional[str]) -> None:
-    eof_action = c_transition_action(None, eof_tag, True)
     end, target, tag, lookahead = first
     first_action = c_transition_action(target, tag, lookahead)
     first_transition = c_transition_condition(end, first_action)
     handles_null = target is None and tag == eof_tag and lookahead
     must_be_replaced = end == 1 and not handles_null
     buf.unindented("#ifdef DFA_USE_LIMIT")
-    buf.line("if (s == limit) {{ {} }}", eof_action)
+    buf.line(
+        "if (s == limit) {{ {} }}", c_transition_action(None, eof_tag, False)
+    )
     if not handles_null:
         buf.line("c = *(s++);")
     if must_be_replaced:
@@ -192,7 +193,9 @@ def generate_c_eof_transition(
     if not handles_null:
         buf.unindented("#else")
         buf.line("c = *(s++);")
-        buf.line("if (c < 1) {{ {} }}", eof_action)
+        buf.line(
+            "if (c == 0) {{ {} }}", c_transition_action(None, eof_tag, True)
+        )
     buf.unindented("#endif")
     if handles_null:
         buf.line("c = *(s++);")
