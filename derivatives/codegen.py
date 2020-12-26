@@ -68,14 +68,14 @@ def generate_dot(dfa: Dfa) -> str:
 
         for state, data in dfa.iter_states():
             grouped: Dict[
-                Tuple[Optional[int], Optional[str]],
+                Tuple[Optional[int], Optional[str], bool],
                 List[Tuple[int, int]]
             ] = defaultdict(list)
             last = 0
-            for end, target, tag in data.transitions:
-                grouped[(target, tag)].append((last, end - 1))
+            for end, target, tag, at_exit in data.transitions:
+                grouped[(target, tag, at_exit)].append((last, end - 1))
                 last = end
-            for (target, tag), ranges in grouped.items():
+            for (target, tag, at_exit), ranges in grouped.items():
                 classes = []
                 for start, end in ranges:
                     size = end - start + 1
@@ -89,7 +89,10 @@ def generate_dot(dfa: Dfa) -> str:
                         classes.append(fmt_char(start) + "-" + fmt_char(end))
                 label = "[{}]".format("".join(classes))
                 if tag is not None:
-                    label += "/" + tag
+                    if at_exit:
+                        label += "/." + tag
+                    else:
+                        label += "/" + tag + "."
                 if target is not None:
                     buf.line('"{}" -> "{}" [label=<{}>]', state, target, label)
                 elif tag is not None:
@@ -171,7 +174,7 @@ def generate_c_match(buf: Buffer, dfa: Dfa) -> None:
         for state, data in dfa.iter_states():
             buf.unindented("S{}:", state)
             if data.entry_tag is not None:
-                buf.line(c_tag_action(data.entry_tag, True))
+                buf.line(c_tag_action(data.entry_tag, False))
             first, *rest = data.transitions
             generate_c_eof_transition(buf, first, data)
             generate_c_transitions(buf, rest)
@@ -180,12 +183,12 @@ def generate_c_match(buf: Buffer, dfa: Dfa) -> None:
 
 def generate_c_eof_transition(
         buf: Buffer, first: DfaTransition, data: DfaState) -> None:
-    end, target, tag = first
-    first_transition = c_transition_condition(end, target, tag, False)
+    end, target, tag, at_exit = first
+    first_transition = c_transition_condition(end, target, tag, at_exit)
     handles_null = target is None and tag == data.eof_tag
     buf.unindented("#ifdef DFA_USE_LIMIT")
     buf.line(
-        "if (s == limit) {{ {} }}", c_transition(None, data.eof_tag, True)
+        "if (s == limit) {{ {} }}", c_transition(None, data.eof_tag, False)
     )
     if not handles_null:
         buf.line("c = *(s++);")
@@ -194,7 +197,7 @@ def generate_c_eof_transition(
         buf.unindented("#else")
         buf.line("c = *(s++);")
         buf.line(
-            "if (c == 0) {{ {} }}", c_transition(None, data.eof_tag, False)
+            "if (c == 0) {{ {} }}", c_transition(None, data.eof_tag, True)
         )
     buf.unindented("#endif")
     if handles_null:
@@ -203,27 +206,27 @@ def generate_c_eof_transition(
 
 
 def generate_c_transitions(buf: Buffer, transitions: DfaTransitions) -> None:
-    for end, target, tag in transitions:
-        buf.line(c_transition_condition(end, target, tag, False))
+    for end, target, tag, at_exit in transitions:
+        buf.line(c_transition_condition(end, target, tag, at_exit))
 
 
 def c_transition_condition(
         end: int, target: Optional[int], tag: Optional[str],
-        entry: bool) -> str:
-    transition = c_transition(target, tag, entry)
+        at_exit: bool) -> str:
+    transition = c_transition(target, tag, at_exit)
     if end == CHARSET_END:
         return transition
     return "if (c < {}) {{ {} }}".format(end, transition)
 
 
-def c_tag_action(tag: str, entry: bool) -> str:
-    pos = "s" if entry else "s - 1"
+def c_tag_action(tag: str, at_exit: bool) -> str:
+    pos = "s - 1" if at_exit else "s"
     return "match->end = {}; match->token = {};".format(pos, c_token_name(tag))
 
 
 def c_transition(
-        target: Optional[int], tag: Optional[str], entry: bool) -> str:
+        target: Optional[int], tag: Optional[str], at_exit: bool) -> str:
     transition = "return;" if target is None else "goto S{};".format(target)
     if tag is not None:
-        transition = "{} {}".format(c_tag_action(tag, entry), transition)
+        transition = "{} {}".format(c_tag_action(tag, at_exit), transition)
     return transition

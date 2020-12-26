@@ -6,14 +6,21 @@ from typing import (
 
 from .vector import Vector
 
-DfaTransition = Tuple[int, Optional[int], Optional[str]]
+
+class DfaTransition(NamedTuple):
+    end: int
+    target: Optional[int]
+    tag: Optional[str]
+    at_exit: bool
+
+
 DfaTransitions = List[DfaTransition]
 
 
 class DfaState(NamedTuple):
     entry_tag: Optional[str]
     eof_tag: Optional[str]
-    transitions: List[DfaTransition]
+    transitions: DfaTransitions
 
 
 class Dfa:
@@ -34,10 +41,10 @@ class Dfa:
             entry, _, transitions = self._states[state]
             if entry is not None:
                 result = (entry, pos)
-            for end, target, tag in transitions:
+            for end, target, tag, at_exit in transitions:
                 if code < end:
                     if tag is not None:
-                        result = (tag, pos)
+                        result = (tag, pos if at_exit else pos + 1)
                     if target is None:
                         return result
                     state = target
@@ -93,16 +100,18 @@ def make_dfa(vector: Vector, tag_resolver: Callable[[Set[int]], str]) -> Dfa:
         if any_target_has_tag:
             lookahead_states.add(state)
 
+    without_transitions = set(eof_tags)
     live = set(eof_tags)
     live_queue = deque(eof_tags)
     while live_queue:
         state = live_queue.popleft()
         for source_state in incoming[state]:
+            without_transitions.discard(source_state)
             if source_state not in live:
                 live.add(source_state)
                 live_queue.append(source_state)
 
-    new_to_old = sorted(live)
+    new_to_old = sorted(live - without_transitions)
     old_to_new = dict((state, i) for i, state in enumerate(new_to_old))
 
     states: List[DfaState] = []
@@ -111,10 +120,16 @@ def make_dfa(vector: Vector, tag_resolver: Callable[[Set[int]], str]) -> Dfa:
         transitions: DfaTransitions = []
         use_lookahead = old_state in lookahead_states
         for end, old_target in delta[old_state]:
-            tag: Optional[str] = None
-            if use_lookahead and eof_tags.get(old_target) is None:
-                tag = source_tag
-            transitions.append((end, old_to_new.get(old_target), tag))
+            at_exit = old_target not in without_transitions
+            if at_exit:
+                tag: Optional[str] = None
+                if use_lookahead and eof_tags.get(old_target) is None:
+                    tag = source_tag
+            else:
+                tag = eof_tags.get(old_target)
+            transitions.append(
+                DfaTransition(end, old_to_new.get(old_target), tag, at_exit)
+            )
         states.append(
             DfaState(
                 entry_tag=None if use_lookahead else source_tag,
@@ -123,7 +138,7 @@ def make_dfa(vector: Vector, tag_resolver: Callable[[Set[int]], str]) -> Dfa:
             )
         )
 
-    return Dfa(states, sorted(eof_tags.values()))
+    return Dfa(states, sorted(set(eof_tags.values())))
 
 
 def compress_transitions(transitions: DfaTransitions) -> DfaTransitions:
