@@ -1,50 +1,50 @@
 from collections import defaultdict, deque
 from itertools import count, groupby
-from typing import Callable, Dict, Iterator, List, Optional, Set, Tuple
+from typing import (
+    Callable, Dict, Iterator, List, NamedTuple, Optional, Set, Tuple
+)
 
 from .vector import Vector
 
-DfaTransition = Tuple[int, Optional[int], Optional[str], bool]
+DfaTransition = Tuple[int, Optional[int], Optional[str]]
 DfaTransitions = List[DfaTransition]
-DfaDelta = List[DfaTransitions]
+DfaDelta = List[Tuple[Optional[str], DfaTransitions]]
 DfaTags = List[Optional[str]]
 
 
+class DfaState(NamedTuple):
+    entry_tag: Optional[str]
+    eof_tag: Optional[str]
+    transitions: List[DfaTransition]
+
+
 class Dfa:
-    def __init__(self, delta: DfaDelta, eof_tags: DfaTags):
-        self._delta = delta
-        self._eof_tags = eof_tags
+    def __init__(self, states: List[DfaState], tags: List[str]):
+        self._states = states
+        self._tags = tags
 
-    def iter_delta(self) -> Iterator[Tuple[int, DfaTransitions]]:
-        return enumerate(self._delta)
+    def iter_states(self) -> Iterator[Tuple[int, DfaState]]:
+        return enumerate(self._states)
 
-    def iter_eof_tags(self) -> Iterator[Tuple[int, Optional[str]]]:
-        return enumerate(self._eof_tags)
-
-    def get_eof_tag(self, state: int) -> Optional[str]:
-        return self._eof_tags[state]
-
-    def get_tags_set(self) -> Set[str]:
-        tags = {tag for tag in self._eof_tags if tag is not None}
-        for transitions in self._delta:
-            for _, _, tag, _ in transitions:
-                if tag is not None:
-                    tags.add(tag)
-        return tags
+    def get_tags(self) -> List[str]:
+        return self._tags
 
     def scan_once(self, input: bytes) -> Optional[Tuple[str, int]]:
         result: Optional[Tuple[str, int]] = None
         state: int = 0
         for pos, code in enumerate(input):
-            for end, target, tag, lookahead in self._delta[state]:
+            entry, _, transitions = self._states[state]
+            if entry is not None:
+                result = (entry, pos)
+            for end, target, tag in transitions:
                 if code < end:
                     if tag is not None:
-                        result = (tag, pos if lookahead else pos + 1)
+                        result = (tag, pos)
                     if target is None:
                         return result
                     state = target
                     break
-        tag = self._eof_tags[state]
+        tag = self._states[state].eof_tag
         if tag is not None:
             result = (tag, len(input))
         return result
@@ -74,53 +74,58 @@ def make_dfa(vector: Vector, tag_resolver: Callable[[Set[int]], str]) -> Dfa:
 
     incoming: Dict[int, Set[int]] = defaultdict(set)
 
+    lookahead_states: Set[int] = set()
     while queue:
         state, vector, state_tag = queue.popleft()
         state_delta = delta[state] = []
         if state_tag is not None:
             eof_tags[state] = state_tag
 
+        any_target_has_tag = False
         for end, target in vector.transitions():
             len_before = len(state_map)
             target_state = state_map[target]
             target_tag = resolve_tag(target.tags())
+            any_target_has_tag |= target_tag is not None
             if len(state_map) != len_before:
                 queue.append((target_state, target, target_tag))
 
             state_delta.append((end, target_state))
             incoming[target_state].add(state)
+        if any_target_has_tag:
+            lookahead_states.add(state)
 
-    lookahead_states: Set[int] = set()
     live = set(eof_tags)
     live_queue = deque(eof_tags)
     while live_queue:
         state = live_queue.popleft()
         for source_state in incoming[state]:
-            lookahead_states.add(source_state)
             if source_state not in live:
                 live.add(source_state)
                 live_queue.append(source_state)
 
-    definite_states = live - lookahead_states
-    new_to_old = sorted(lookahead_states)
+    new_to_old = sorted(live)
     old_to_new = dict((state, i) for i, state in enumerate(new_to_old))
 
-    pruned_delta: DfaDelta = []
+    states: List[DfaState] = []
     for old_state in new_to_old:
         source_tag = eof_tags.get(old_state)
         transitions: DfaTransitions = []
+        use_lookahead = old_state in lookahead_states
         for end, old_target in delta[old_state]:
-            lookahead = old_target not in definite_states
-            tag = eof_tags.get(old_target)
-            if lookahead and tag is None:
+            tag: Optional[str] = None
+            if use_lookahead and eof_tags.get(old_target) is None:
                 tag = source_tag
-            transitions.append(
-                (end, old_to_new.get(old_target), tag, lookahead)
+            transitions.append((end, old_to_new.get(old_target), tag))
+        states.append(
+            DfaState(
+                entry_tag=None if use_lookahead else source_tag,
+                eof_tag=source_tag if use_lookahead else None,
+                transitions=compress_transitions(transitions)
             )
-        pruned_delta.append(compress_transitions(transitions))
-    pruned_eof_tags = [eof_tags.get(old_state) for old_state in new_to_old]
+        )
 
-    return Dfa(pruned_delta, pruned_eof_tags)
+    return Dfa(states, sorted(eof_tags.values()))
 
 
 def compress_transitions(transitions: DfaTransitions) -> DfaTransitions:
