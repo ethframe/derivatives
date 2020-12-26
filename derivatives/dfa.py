@@ -122,9 +122,12 @@ def make_dfa(vector: Vector, tag_resolver: Callable[[Set[int]], str]) -> Dfa:
         for end, old_target in delta[old_state]:
             if use_lookahead:
                 at_exit = old_target not in without_transitions
-                tag = eof_tags.get(old_target)
-                if at_exit and tag is None:
-                    tag = source_tag
+                if at_exit:
+                    tag: Optional[str] = None
+                    if eof_tags.get(old_target) is None:
+                        tag = source_tag
+                else:
+                    tag = eof_tags.get(old_target)
             else:
                 at_exit = True
                 tag = None
@@ -144,6 +147,6 @@ def make_dfa(vector: Vector, tag_resolver: Callable[[Set[int]], str]) -> Dfa:
 
 def compress_transitions(transitions: DfaTransitions) -> DfaTransitions:
     result: DfaTransitions = []
-    for _, group in groupby(transitions, lambda x: (x[1], x[2])):
+    for _, group in groupby(transitions, lambda x: x[1:]):
         result.append(list(group)[-1])
     return result
