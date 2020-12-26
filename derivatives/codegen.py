@@ -202,6 +202,7 @@ def generate_c_eof_transition(
     buf.unindented("#endif")
     if handles_null:
         buf.line("c = *(s++);")
+    if handles_null or end != 1:
         buf.line(first_transition)
 
 

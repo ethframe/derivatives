@@ -120,13 +120,14 @@ def make_dfa(vector: Vector, tag_resolver: Callable[[Set[int]], str]) -> Dfa:
         transitions: DfaTransitions = []
         use_lookahead = old_state in lookahead_states
         for end, old_target in delta[old_state]:
-            at_exit = old_target not in without_transitions
-            if at_exit:
-                tag: Optional[str] = None
-                if use_lookahead and eof_tags.get(old_target) is None:
+            if use_lookahead:
+                at_exit = old_target not in without_transitions
+                tag = eof_tags.get(old_target)
+                if at_exit and tag is None:
                     tag = source_tag
             else:
-                tag = eof_tags.get(old_target)
+                at_exit = True
+                tag = None
             transitions.append(
                 DfaTransition(end, old_to_new.get(old_target), tag, at_exit)
             )
