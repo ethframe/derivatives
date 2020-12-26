@@ -8,8 +8,6 @@ from .vector import Vector
 
 DfaTransition = Tuple[int, Optional[int], Optional[str]]
 DfaTransitions = List[DfaTransition]
-DfaDelta = List[Tuple[Optional[str], DfaTransitions]]
-DfaTags = List[Optional[str]]
 
 
 class DfaState(NamedTuple):
