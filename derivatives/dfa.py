@@ -64,23 +64,21 @@ class Dfa:
             input = input[pos:]
 
 
-def make_dfa(vector: Vector, tag_resolver: Callable[[Set[int]], str]) -> Dfa:
+def make_dfa(vector: Vector, tag_resolver: Callable[[List[int]], str]) -> Dfa:
 
-    def resolve_tag(tags: Set[int]) -> Optional[str]:
+    def resolve_tag(tags: List[int]) -> Optional[str]:
         if tags:
             return tag_resolver(tags)
         return None
 
-    delta: Dict[int, List[Tuple[int, int, Optional[str]]]] = {}
-
-    tags = set()
     state_map: Dict[Vector, int] = defaultdict(count().__next__)
-    queue = deque([(state_map[vector], vector)])
-
-    incoming: Dict[int, List[Tuple[int, Optional[str]]]] = defaultdict(list)
-
+    tags = set()
+    delta: Dict[int, List[Tuple[int, int, Optional[str]]]] = {}
+    incoming: Dict[int, List[int]] = defaultdict(list)
     single_tag_states: Dict[int, Optional[str]] = {}
     lookahead_states: Set[int] = set()
+
+    queue = deque([(state_map[vector], vector)])
     while queue:
         state, vector = queue.popleft()
         state_delta = delta[state] = []
@@ -103,7 +101,7 @@ def make_dfa(vector: Vector, tag_resolver: Callable[[Set[int]], str]) -> Dfa:
                     del single_tag_states[target_state]
 
             state_delta.append((end, target_state, target_tag))
-            incoming[target_state].append((state, target_tag))
+            incoming[target_state].append(state)
 
     state_tag: Dict[int, str] = {}
     live = set(lookahead_states)
@@ -113,7 +111,7 @@ def make_dfa(vector: Vector, tag_resolver: Callable[[Set[int]], str]) -> Dfa:
         tag = single_tag_states.get(state)
         if tag is not None:
             state_tag[state] = tag
-        for source_state, tag in incoming[state]:
+        for source_state in incoming[state]:
             if source_state not in live:
                 live.add(source_state)
                 live_queue.append(source_state)

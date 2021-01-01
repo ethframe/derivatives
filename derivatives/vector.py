@@ -1,4 +1,4 @@
-from typing import List, Optional, Set, Tuple
+from typing import List, Optional, Tuple
 
 from .core import EMPTY, EPSILON, CRegex
 from .partition import CHARSET_END, Partition, make_merge_fn
@@ -30,8 +30,8 @@ class Vector:
     def __init__(self, items: List[VectorItem]):
         self._items = items
 
-    def tags(self) -> Set[int]:
-        return {tag for tag, regex in self._items if regex.nullable()}
+    def tags(self) -> List[int]:
+        return [tag for tag, regex in self._items if regex.nullable()]
 
     def remove_epsilon(self) -> "Vector":
         return Vector(
