@@ -1,6 +1,6 @@
 from typing import List, Optional, Set, Tuple
 
-from .core import EMPTY, CRegex
+from .core import EMPTY, EPSILON, CRegex
 from .partition import CHARSET_END, Partition, make_merge_fn
 
 VectorItem = Tuple[int, CRegex]
@@ -32,6 +32,11 @@ class Vector:
 
     def tags(self) -> Set[int]:
         return {tag for tag, regex in self._items if regex.nullable()}
+
+    def remove_epsilon(self) -> "Vector":
+        return Vector(
+            [(tag, regex) for tag, regex in self._items if regex != EPSILON]
+        )
 
     def transitions(self) -> Partition["Vector"]:
         partial: Partition[List[VectorItem]] = [(CHARSET_END, [])]

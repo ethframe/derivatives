@@ -26,5 +26,11 @@ int lex(const char *s) {
 
 
 int main() {
-    return lex("int main() { int r = foo(1, \"a\"); if (r == 1) { bar(); } return 0; } // \xd0\x90\n");
+    return lex(
+        "int main() {\n"
+        "    int r = foo(1, \"a\");\n"
+        "    if (r == 1) { bar(); }\n"
+        "    return 0;\n"
+        "} // \xd0\x90\n"
+    );
 }
