@@ -1,4 +1,4 @@
-from typing import Callable, Iterable, List, Tuple, TypeVar
+from typing import Callable, Iterable, Iterator, List, Tuple, TypeVar
 
 CHARSET_END = 0x100
 
@@ -6,6 +6,7 @@ T = TypeVar('T')
 U = TypeVar('U')
 Partition = List[Tuple[int, T]]
 IterablePartition = Iterable[Tuple[int, T]]
+PartitionIterator = Iterator[Tuple[int, T]]
 
 
 def make_merge_fn(update: Callable[[T, U], T], update_copy: Callable[[T, U], T]

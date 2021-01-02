@@ -84,15 +84,13 @@ def make_dfa(vector: Vector, tag_resolver: Callable[[List[int]], str]) -> Dfa:
     while queue:
         source, source_vector = queue.popleft()
 
-        for end, target_vector in source_vector.transitions():
+        for end, (target_tags, target_vector) in source_vector.transitions():
             target_tag: Optional[str] = None
-            target_tags = target_vector.tags()
             if target_tags:
                 target_tag = tag_resolver(target_tags)
                 tags.add(target_tag)
                 source.live = True
                 live_queue.append(source)
-            target_vector = target_vector.remove_epsilon()
 
             new_index = len(states)
             target_index = vector_to_index.setdefault(target_vector, new_index)
