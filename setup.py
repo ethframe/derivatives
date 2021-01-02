@@ -3,7 +3,7 @@ import setuptools
 setuptools.setup(
     name='derivatives',
     version='0.1.dev0',
-    license='MIT Licence',
+    license='MIT License',
     author='ethframe',
     description='Lexer generator based on regular expressions derivatives',
     url='https://github.com/ethframe/derivatives',
