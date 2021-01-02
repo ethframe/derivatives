@@ -1,6 +1,6 @@
 import sys
 
-from .core import EMPTY, EPSILON, CRegex, Tag
+from .core import EMPTY, EPSILON, CRegex
 from .utf8 import utf8_range_regex
 
 
@@ -94,7 +94,3 @@ def any_with(regex: Regex) -> Regex:
 
 def any_without(regex: Regex) -> Regex:
     return ~any_with(regex)
-
-
-def tag(value: int) -> Regex:
-    return Regex(Tag(value))

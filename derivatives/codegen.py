@@ -4,7 +4,7 @@ from contextlib import contextmanager
 from io import StringIO
 from typing import Any, Dict, Iterator, List, Optional, Tuple
 
-from .dfa import Dfa, DfaTransition, DfaTransitions
+from .dfa import Dfa, DfaState, DfaTransition, DfaTransitions
 from .partition import CHARSET_END
 
 
@@ -56,21 +56,26 @@ def generate_dot(dfa: Dfa) -> str:
         buf.line('"" -> "0"')
         buf.line('"end" [shape=doublecircle]')
 
-        for state, tag in dfa.iter_eof_tags():
-            buf.line('"{}" [shape=circle fixedsize=shape]', state)
-            if tag:
-                buf.line('"{}" -> "end" [label="EOF/{}"]', state, tag)
+        for state, data in dfa.iter_states():
+            label = str(state)
+            if data.entry_tag:
+                label += "/" + data.entry_tag
+            buf.line(
+                '"{}" [shape=circle fixedsize=shape label=<{}>]', state, label
+            )
+            if data.eof_tag:
+                buf.line('"{}" -> "end" [label="EOF/{}"]', state, data.eof_tag)
 
-        for state, trantisions in dfa.iter_delta():
+        for state, data in dfa.iter_states():
             grouped: Dict[
                 Tuple[Optional[int], Optional[str], bool],
                 List[Tuple[int, int]]
             ] = defaultdict(list)
             last = 0
-            for end, target, tag, lookahead in trantisions:
-                grouped[(target, tag, lookahead)].append((last, end - 1))
+            for end, target, tag, at_exit in data.transitions:
+                grouped[(target, tag, at_exit)].append((last, end - 1))
                 last = end
-            for (target, tag, lookahead), ranges in grouped.items():
+            for (target, tag, at_exit), ranges in grouped.items():
                 classes = []
                 for start, end in ranges:
                     size = end - start + 1
@@ -84,10 +89,10 @@ def generate_dot(dfa: Dfa) -> str:
                         classes.append(fmt_char(start) + "-" + fmt_char(end))
                 label = "[{}]".format("".join(classes))
                 if tag is not None:
-                    if lookahead:
-                        label += "/" + tag + "."
-                    else:
+                    if at_exit:
                         label += "/." + tag
+                    else:
+                        label += "/" + tag + "."
                 if target is not None:
                     buf.line('"{}" -> "{}" [label=<{}>]', state, target, label)
                 elif tag is not None:
@@ -130,7 +135,7 @@ def generate_c(dfa: Dfa) -> str:
 
 
 def generate_c_tokens(buf: Buffer, dfa: Dfa) -> None:
-    tokens = sorted(dfa.get_tags_set())
+    tokens = dfa.get_tags()
 
     buf.line("#define DFA_INVALID_TOKEN 0")
     for value, tag in enumerate(tokens, 1):
@@ -166,66 +171,63 @@ def generate_c_match(buf: Buffer, dfa: Dfa) -> None:
         buf.line("match->begin = match->end = s;")
         buf.line("match->token = DFA_INVALID_TOKEN;")
         buf.skip()
-        for state, transitions in dfa.iter_delta():
+        for state, data in dfa.iter_states():
             buf.unindented("S{}:", state)
-            eof_tag = dfa.get_eof_tag(state)
-            first, *rest = transitions
-            generate_c_eof_transition(buf, first, eof_tag)
+            if data.entry_tag is not None:
+                buf.line(c_tag_action(data.entry_tag, False))
+            first, *rest = data.transitions
+            generate_c_eof_transition(buf, first, data)
             generate_c_transitions(buf, rest)
     buf.line("}")
 
 
 def generate_c_eof_transition(
-        buf: Buffer, first: DfaTransition, eof_tag: Optional[str]) -> None:
-    end, target, tag, lookahead = first
-    first_action = c_transition_action(target, tag, lookahead)
-    first_transition = c_transition_condition(end, first_action)
-    handles_null = target is None and tag == eof_tag and lookahead
-    must_be_replaced = end == 1 and not handles_null
+        buf: Buffer, first: DfaTransition, data: DfaState) -> None:
+    end, target, tag, at_exit = first
+    first_transition = c_transition_condition(end, target, tag, at_exit)
+    handles_null = target is None and tag == data.eof_tag
     buf.unindented("#ifdef DFA_USE_LIMIT")
     buf.line(
-        "if (s == limit) {{ {} }}", c_transition_action(None, eof_tag, False)
+        "if (s == limit) {{ {} }}", c_transition(None, data.eof_tag, False)
     )
     if not handles_null:
         buf.line("c = *(s++);")
-    if must_be_replaced:
-        buf.line(first_transition)
-    if not handles_null:
+        if end == 1:
+            buf.line(first_transition)
         buf.unindented("#else")
         buf.line("c = *(s++);")
         buf.line(
-            "if (c == 0) {{ {} }}", c_transition_action(None, eof_tag, True)
+            "if (c == 0) {{ {} }}", c_transition(None, data.eof_tag, True)
         )
     buf.unindented("#endif")
     if handles_null:
         buf.line("c = *(s++);")
-    if not must_be_replaced:
+    if handles_null or end != 1:
         buf.line(first_transition)
 
 
 def generate_c_transitions(buf: Buffer, transitions: DfaTransitions) -> None:
-    for end, target, tag, lookahead in transitions:
-        action = c_transition_action(target, tag, lookahead)
-        buf.line(c_transition_condition(end, action))
+    for end, target, tag, at_exit in transitions:
+        buf.line(c_transition_condition(end, target, tag, at_exit))
 
 
-def c_transition_condition(end: int, action: str) -> str:
+def c_transition_condition(
+        end: int, target: Optional[int], tag: Optional[str],
+        at_exit: bool) -> str:
+    transition = c_transition(target, tag, at_exit)
     if end == CHARSET_END:
-        return action
-    return "if (c < {}) {{ {} }}".format(end, action)
+        return transition
+    return "if (c < {}) {{ {} }}".format(end, transition)
 
 
-def c_transition_action(
-        target: Optional[int], tag: Optional[str], lookahead: bool) -> str:
-    action: List[str] = []
+def c_tag_action(tag: str, at_exit: bool) -> str:
+    pos = "s - 1" if at_exit else "s"
+    return "match->end = {}; match->token = {};".format(pos, c_token_name(tag))
+
+
+def c_transition(
+        target: Optional[int], tag: Optional[str], at_exit: bool) -> str:
+    transition = "return;" if target is None else "goto S{};".format(target)
     if tag is not None:
-        if lookahead:
-            action.append("match->end = s - 1;")
-        else:
-            action.append("match->end = s;")
-        action.append("match->token = {};".format(c_token_name(tag)))
-    if target is None:
-        action.append("return;")
-    else:
-        action.append("goto S{};".format(target))
-    return " ".join(action)
+        transition = "{} {}".format(c_tag_action(tag, at_exit), transition)
+    return transition
