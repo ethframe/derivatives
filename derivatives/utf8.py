@@ -69,11 +69,10 @@ def encode_range(lo: int, hi: int) -> List[Tuple[int, int]]:
 
 def to_byte_regex(lo: int, hi: int) -> CRegex:
     ranges: Ranges = []
-    if lo > 0:
-        ranges.append((lo, False))
-    end = hi + 1
-    ranges.append((end, True))
-    if end < CHARSET_END:
+    if lo != 0:
+        ranges.append((lo - 1, False))
+    ranges.append((hi, True))
+    if hi != CHARSET_END:
         ranges.append((CHARSET_END, False))
     return CharClass(ranges)
 

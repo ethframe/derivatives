@@ -73,15 +73,14 @@ def generate_dot(dfa: Dfa) -> str:
             ] = defaultdict(list)
             last = 0
             for end, target, tag, at_exit in data.transitions:
-                grouped[(target, tag, at_exit)].append((last, end - 1))
-                last = end
+                grouped[(target, tag, at_exit)].append((last, end))
+                last = end + 1
             for (target, tag, at_exit), ranges in grouped.items():
                 classes = []
                 for start, end in ranges:
-                    size = end - start + 1
-                    if size == 1:
+                    if start == end:
                         classes.append(fmt_char(start))
-                    elif size <= 3:
+                    elif end - start < 3:
                         classes.append(
                             "".join(fmt_char(c) for c in range(start, end + 1))
                         )
@@ -90,9 +89,9 @@ def generate_dot(dfa: Dfa) -> str:
                 label = "[{}]".format("".join(classes))
                 if tag is not None:
                     if at_exit:
-                        label += "/." + tag
-                    else:
                         label += "/" + tag + "."
+                    else:
+                        label += "/." + tag
                 if target is not None:
                     buf.line('"{}" -> "{}" [label=<{}>]', state, target, label)
                 elif tag is not None:
@@ -192,7 +191,7 @@ def generate_c_eof_transition(
     )
     if not handles_null:
         buf.line("c = *(s++);")
-        if end == 1:
+        if end == 0:
             buf.line(first_transition)
         buf.unindented("#else")
         buf.line("c = *(s++);")
@@ -202,7 +201,7 @@ def generate_c_eof_transition(
     buf.unindented("#endif")
     if handles_null:
         buf.line("c = *(s++);")
-    if handles_null or end != 1:
+    if handles_null or end != 0:
         buf.line(first_transition)
 
 
@@ -217,7 +216,7 @@ def c_transition_condition(
     transition = c_transition(target, tag, at_exit)
     if end == CHARSET_END:
         return transition
-    return "if (c < {}) {{ {} }}".format(end, transition)
+    return "if (c <= {}) {{ {} }}".format(end, transition)
 
 
 def c_tag_action(tag: str, at_exit: bool) -> str:

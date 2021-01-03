@@ -42,7 +42,7 @@ class Dfa:
             if entry is not None:
                 result = (entry, pos)
             for end, target, tag, at_exit in transitions:
-                if code < end:
+                if code <= end:
                     if tag is not None:
                         result = (tag, pos if at_exit else pos + 1)
                     if target is None:

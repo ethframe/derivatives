@@ -1,6 +1,6 @@
 from typing import Callable, Iterable, Iterator, List, Tuple, TypeVar
 
-CHARSET_END = 0x100
+CHARSET_END = 0xFF
 
 T = TypeVar('T')
 U = TypeVar('U')
