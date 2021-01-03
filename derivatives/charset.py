@@ -8,17 +8,18 @@ class Scanner:
         self._pos = 0
         self.char = None if len(chars) < 1 else chars[0]
 
-    def advance(self, n: int = 1) -> bool:
+    def advance(self, n: int = 1) -> None:
         if self._pos + n < len(self._chars):
             self._pos += n
             self.char = self._chars[self._pos]
-            return True
-        self.char = None
-        return False
+        else:
+            self._pos = len(self._chars)
+            self.char = None
 
     def expect(self, char: str) -> bool:
         if self.char == char:
-            return self.advance()
+            self.advance()
+            return True
         return False
 
     def consume(self, n: int, chars: Set[str]) -> Optional[str]:
