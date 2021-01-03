@@ -173,53 +173,52 @@ def generate_c_match(buf: Buffer, dfa: Dfa) -> None:
         for state, data in dfa.iter_states():
             buf.unindented("S{}:", state)
             if data.entry_tag is not None:
-                buf.line(c_tag_action(data.entry_tag, False))
+                buf.line(c_tag_update(data.entry_tag, False))
             first, *rest = data.transitions
-            generate_c_eof_transition(buf, first, data)
-            generate_c_transitions(buf, rest)
+            generate_c_eof_transition(buf, first, data.eof_tag)
+            for transition in rest:
+                generate_c_transition(buf, transition)
     buf.line("}")
 
 
 def generate_c_eof_transition(
-        buf: Buffer, first: DfaTransition, data: DfaState) -> None:
-    end, target, tag, at_exit = first
-    first_transition = c_transition_condition(end, target, tag, at_exit)
-    handles_null = target is None and tag == data.eof_tag
+        buf: Buffer, first: DfaTransition, eof_tag: Optional[str]) -> None:
+    end, target, tag, _ = first
     buf.unindented("#ifdef DFA_USE_LIMIT")
-    buf.line(
-        "if (s == limit) {{ {} }}", c_transition(None, data.eof_tag, False)
-    )
-    if not handles_null:
-        buf.line("c = *(s++);")
-        if end == 0:
-            buf.line(first_transition)
-        buf.unindented("#else")
-        buf.line("c = *(s++);")
-        buf.line(
-            "if (c == 0) {{ {} }}", c_transition(None, data.eof_tag, True)
-        )
+    buf.line("if (s == limit) {{ {} }}", c_transition(None, eof_tag, False))
     buf.unindented("#endif")
-    if handles_null:
-        buf.line("c = *(s++);")
+    handles_null = target is None and tag == eof_tag
+    buf.line("c = *(s++);")
+    if not handles_null:
+        buf.unindented("#ifndef DFA_USE_LIMIT")
+        buf.line("if (c == 0x00) {{ {} }}", c_transition(None, eof_tag, True))
+        if end == 0:
+            buf.unindented("#else")
+            generate_c_transition(buf, first)
+        buf.unindented("#endif")
     if handles_null or end != 0:
-        buf.line(first_transition)
+        generate_c_transition(buf, first)
 
 
-def generate_c_transitions(buf: Buffer, transitions: DfaTransitions) -> None:
-    for end, target, tag, at_exit in transitions:
-        buf.line(c_transition_condition(end, target, tag, at_exit))
+def generate_c_transition(buf: Buffer, transition: DfaTransition) -> None:
+    end, target, tag, at_exit = transition
+    action = c_transition(target, tag, at_exit)
+    if end != CHARSET_END:
+        buf.line("if (c <= {}) {{ {} }}", c_char_literal(end), action)
+    else:
+        buf.line(action)
 
 
-def c_transition_condition(
-        end: int, target: Optional[int], tag: Optional[str],
-        at_exit: bool) -> str:
-    transition = c_transition(target, tag, at_exit)
-    if end == CHARSET_END:
-        return transition
-    return "if (c <= {}) {{ {} }}".format(end, transition)
+def c_char_literal(code: int) -> str:
+    if 0x20 <= code < 0x7F:
+        char = chr(code)
+        if char in "'\\":
+            char = "\\" + char
+        return "'{}'".format(char)
+    return "0x{:02X}".format(code)
 
 
-def c_tag_action(tag: str, at_exit: bool) -> str:
+def c_tag_update(tag: str, at_exit: bool) -> str:
     pos = "s - 1" if at_exit else "s"
     return "match->end = {}; match->token = {};".format(pos, c_token_name(tag))
 
@@ -228,5 +227,5 @@ def c_transition(
         target: Optional[int], tag: Optional[str], at_exit: bool) -> str:
     transition = "return;" if target is None else "goto S{};".format(target)
     if tag is not None:
-        transition = "{} {}".format(c_tag_action(tag, at_exit), transition)
+        transition = "{} {}".format(c_tag_update(tag, at_exit), transition)
     return transition
