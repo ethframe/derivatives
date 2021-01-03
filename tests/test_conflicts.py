@@ -1,12 +1,12 @@
 from typing import Dict, Set
 
-from derivatives import char, char_range, make_lexer, string
+from derivatives import char, char_set, make_lexer, string
 from derivatives.lexer import select_first
 
 
 def test_conflicts():
-    word = char_range("a", "z").plus()
-    num = char_range("0", "9").plus()
+    word = char_set("a-z").plus()
+    num = char_set("0-9").plus()
 
     re_a = (word * char(" ")).opt() * string("test")
     re_b = (num * char(" ")).opt() * string("test")

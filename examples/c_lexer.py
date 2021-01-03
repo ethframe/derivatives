@@ -1,19 +1,19 @@
 from typing import List, Tuple
 
 from derivatives import (
-    Regex, any_char, any_without, char, char_range, char_set, generate_c,
-    generate_dot, make_lexer, select_first, string
+    Regex, any_without, char, char_set, generate_c, generate_dot, make_lexer,
+    select_first, string
 )
 
 
 def tokens() -> List[Tuple[str, Regex]]:
     # Adapted from http://www.quut.com/c/ANSI-C-grammar-l.html
-    O = char_range("0", "7")
-    D = char_range("0", "9")
-    NZ = char_range("1", "9")
-    L = char_range("a", "z") | char_range("A", "Z") | char("_")
+    O = char_set("0-7")
+    D = char_set("0-9")
+    NZ = char_set("1-9")
+    L = char_set("a-zA-Z_")
     A = L | D
-    H = char_range("a", "f") | char_range("A", "F") | D
+    H = char_set("a-fA-F") | D
     HP = char("0") * char_set("xX")
     E = char_set("Ee") * char_set("+-").opt() * D.plus()
     P = char_set("Pp") * char_set("+-").opt() * D.plus()
@@ -23,7 +23,7 @@ def tokens() -> List[Tuple[str, Regex]]:
         (char_set("lL") | string("ll") | string("LL")) * char_set("uU").opt()
     CP = char_set("uUL")
     SP = string("u8") | CP
-    ES = char("\\") * (char_set("'\"?\\abfnrtv") | O | O * O | O * O * O |
+    ES = char("\\") * (char_set(r"'\"?\\abfnrtv") | O | O * O | O * O * O |
                        char("x") * H.plus())
     WS = char_set(" \t\v\n\f")
 
@@ -31,8 +31,8 @@ def tokens() -> List[Tuple[str, Regex]]:
         (
             "comment",
             (
-                string("/*") * any_without(string("*/")) * string("*/") | 
-                string("//") * (any_char() & (~char("\n"))).star()
+                string("/*") * any_without(string("*/")) * string("*/") |
+                string("//") * char_set(r"^\n").star()
             )
         ),
     ]
@@ -57,7 +57,7 @@ def tokens() -> List[Tuple[str, Regex]]:
 
     tokens.append(("charconst",
                    CP.opt() * char("'") *
-                   (ES | (any_char() & (~char_set("'\\\n")))).plus() *
+                   (ES | char_set(r"^'\\\n")).plus() *
                    char("'")))
 
     tokens.append(("floatconst",
@@ -70,7 +70,7 @@ def tokens() -> List[Tuple[str, Regex]]:
 
     tokens.append(("string",
                    (SP.opt() * char("\"") *
-                    (ES | (any_char() & (~char_set("\"\\\n")))).star() *
+                    (ES | char_set(r"^\"\\\n")).star() *
                     char("\"") * WS.star()).plus()))
 
     ops = [

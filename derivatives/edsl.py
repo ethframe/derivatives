@@ -1,5 +1,6 @@
 import sys
 
+from .charset import parse_char_set
 from .core import EMPTY, EPSILON, CRegex
 from .utf8 import utf8_range_regex
 
@@ -57,35 +58,21 @@ def any_char() -> Regex:
 
 
 def char(char: str) -> Regex:
-    return char_range(char, char)
+    return Regex(utf8_range_regex(ord(char), ord(char)))
 
 
 def char_set(chars: str) -> Regex:
     regex: CRegex = EMPTY
-    start = 0
-    end = -1
-    for char in sorted(chars):
-        code = ord(char)
-        if code == end:
-            end += 1
-        else:
-            if end != -1:
-                regex = regex.union(utf8_range_regex(start, end))
-            start = end = code
-    if end != -1:
+    for start, end in parse_char_set(chars):
         regex = regex.union(utf8_range_regex(start, end))
     return Regex(regex)
 
 
-def char_range(start: str, end: str) -> Regex:
-    return Regex(utf8_range_regex(ord(start), ord(end)))
-
-
 def string(s: str) -> Regex:
-    regex: Regex = Regex(EPSILON)
+    regex: CRegex = EPSILON
     for c in s:
-        regex *= char(c)
-    return regex
+        regex = regex.join(utf8_range_regex(ord(c), ord(c)))
+    return Regex(regex)
 
 
 def any_with(regex: Regex) -> Regex:
