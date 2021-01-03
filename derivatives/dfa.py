@@ -71,6 +71,7 @@ class _State:
         self.incoming: List[_State] = []
         self.tag = tag
         self.live = False
+        self.lookahead = False
 
 
 def make_dfa(vector: Vector, tag_resolver: Callable[[List[int]], str]) -> Dfa:
@@ -89,7 +90,7 @@ def make_dfa(vector: Vector, tag_resolver: Callable[[List[int]], str]) -> Dfa:
             if target_tags:
                 target_tag = tag_resolver(target_tags)
                 tags.add(target_tag)
-                source.live = True
+                source.lookahead = source.live = True
                 live_queue.append(source)
 
             new_index = len(states)
@@ -119,22 +120,20 @@ def make_dfa(vector: Vector, tag_resolver: Callable[[List[int]], str]) -> Dfa:
 
     dfa_states: List[DfaState] = []
     for state in states:
-        lookahead = False
         transitions: DfaTransitions = []
         for end, target, tag in state.transitions:
-            lookahead |= tag is not None
             at_exit = False
             if target.live and target.tag is not None:
                 tag = None
-            elif tag is None and state.tag is not None:
+            elif tag is None and state.lookahead and state.tag is not None:
                 tag = state.tag
                 at_exit = True
             transitions.append(DfaTransition(end, target.index, tag, at_exit))
 
         dfa_states.append(
             DfaState(
-                entry_tag=None if lookahead else state.tag,
-                eof_tag=state.tag if lookahead else None,
+                entry_tag=None if state.lookahead else state.tag,
+                eof_tag=state.tag if state.lookahead else None,
                 transitions=compress_transitions(transitions)
             )
         )
